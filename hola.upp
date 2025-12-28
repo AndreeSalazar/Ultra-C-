@@ -1,0 +1,4 @@
+class Hola:
+    nombre: String
+    def saludo(self) -> String:
+        return "Hola " + self.nombre

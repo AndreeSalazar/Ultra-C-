@@ -1,0 +1,14 @@
+# Rust target directory
+target/
+
+# Generated outputs
+dist/
+
+# MSVC artifacts
+*.obj
+*.pdb
+*.ilk
+
+# VS Code / IDE
+.vscode/
+

@@ -1,0 +1,13 @@
+[package]
+name = "ultracpp"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ultracpp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ultracpp"
+path = "src/main.rs"
+
