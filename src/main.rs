@@ -66,6 +66,19 @@ fn type_check(classes: &[ultracpp::Class]) -> Vec<String> {
                     errors.push(format!("Método desconocido '{}' en {}::{}", name, c.name, method));
                 }
             }
+            ultracpp::Expr::FileCall(name) => {
+                // call hola.upp -> método local hola_upp() o hola()
+                let target_method_upp = format!("{}_upp", name.replace('.', "_"));
+                let target_method_std = name.replace('.', "_");
+                let has_upp = c.methods.iter().any(|m| m.name == target_method_upp);
+                let has_std = c.methods.iter().any(|m| m.name == target_method_std);
+                if !has_upp && !has_std {
+                    errors.push(format!(
+                        "Llamada 'call {}' no resuelta en clase {}. Define {}() o {}()",
+                        name, c.name, target_method_upp, target_method_std
+                    ));
+                }
+            }
             ultracpp::Expr::SuperCall { name, .. } => {
                 if let Some(b) = &c.base {
                     if let Some(base_cls) = classes.get(b) {
@@ -95,7 +108,7 @@ fn type_check(classes: &[ultracpp::Class]) -> Vec<String> {
             }
             ultracpp::Expr::VarDecl { ty, .. } => {
                 let t = ty.trim().to_string();
-                if !is_builtin_ty(&t) && !classes.contains_key(&t) {
+                if t != "Auto" && !is_builtin_ty(&t) && !classes.contains_key(&t) {
                     errors.push(format!("Tipo '{}' no resuelto en {}::{}", t, c.name, method));
                 }
             }
@@ -219,6 +232,7 @@ run Main
     let mut bench = false;
     let mut staging = false;
     let mut watch = false;
+    let mut unity = false;
     for a in args.iter().skip(2) {
         if a.starts_with("--compile") {
             do_compile = true;
@@ -240,6 +254,8 @@ run Main
             staging = true;
         } else if a.starts_with("--watch") {
             watch = true;
+        } else if a.starts_with("--unity") {
+            unity = true;
         } else if !a.starts_with("--") && outdir_root == "dist" {
             outdir_root = a.to_string();
         }
@@ -335,21 +351,81 @@ run Main
                 }
                 class.extra_includes = ultracpp::resolve_includes(&merged);
                 if class.namespace.is_none() { class.namespace = merged.namespace.clone(); }
-                let hpp = codegen::header(&class);
-                let cpp = codegen::source(&class);
-                let hpp_path = include_dir.join(format!("{}.hpp", class.name.to_lowercase()));
-                let cpp_path = src_dir.join(format!("{}.cpp", class.name.to_lowercase()));
-                write(hpp_path.to_str().unwrap(), &hpp);
-                write(cpp_path.to_str().unwrap(), &cpp);
-                println!("generated: {}, {}", hpp_path.display(), cpp_path.display());
             }
+
+            if unity {
+                // Clean up existing .cpp files to avoid duplicates/conflicts
+                if let Ok(rd) = fs::read_dir(&src_dir) {
+                    for e in rd.flatten() {
+                        let p = e.path();
+                        if let Some(ext) = p.extension() {
+                            if ext.to_string_lossy().eq_ignore_ascii_case("cpp") {
+                                let _ = fs::remove_file(p);
+                            }
+                        }
+                    }
+                }
+                let mut content = codegen::unity_build(&classes);
+                if needs_object_base {
+                     // In unity build, Object base should be included or defined. 
+                     // For simplicity, we assume Object.hpp is not needed if we define it inline or use std types.
+                     // But if we really need it, we might need to inject it.
+                     // Let's just include "Object.hpp" and hope it exists or generated.
+                     // Actually, write_object_base generates Object.hpp/cpp.
+                     // We should probably inline Object class in unity build if possible, but let's stick to include for now.
+                     content.insert_str(0, "#include \"Object.hpp\"\n");
+                }
+                
+                if !no_main {
+                    let target = select_entry_target(&classes, &merged);
+                    let qname = if let Some(ns) = &target.namespace { format!("{}::{}", ns, target.name) } else { target.name.clone() };
+                    // Append main
+                    content.push_str("\n\n");
+                    content.push_str("#ifdef _WIN32\n");
+                    content.push_str("#include <windows.h>\n");
+                    content.push_str("#endif\n");
+                    content.push_str("\nint main() {\n");
+                    content.push_str("  #ifdef _WIN32\n");
+                    content.push_str("    SetConsoleOutputCP(65001);\n");
+                    content.push_str("  #endif\n");
+                    content.push_str("  try {\n");
+                    if target.methods.iter().any(|m| m.name == "run" && m.is_static) {
+                        content.push_str(&format!("    {}::run();\n", qname));
+                    } else {
+                        content.push_str(&format!("    {} app;\n", qname));
+                        content.push_str("    app.run();\n");
+                    }
+                    content.push_str("  } catch (const std::exception& e) {\n");
+                    content.push_str("    std::cerr << e.what() << std::endl;\n");
+                    content.push_str("    return 1;\n");
+                    content.push_str("  }\n");
+                    content.push_str("  return 0;\n");
+                    content.push_str("}\n");
+                }
+                
+                let all_cpp = src_dir.join("all.cpp");
+                write(all_cpp.to_str().unwrap(), &content);
+                println!("generated unity build: {}", all_cpp.display());
+            } else {
+                for class in &classes {
+                    let hpp = codegen::header(&class);
+                    let cpp = codegen::source(&class);
+                    let hpp_path = include_dir.join(format!("{}.hpp", class.name.to_lowercase()));
+                    let cpp_path = src_dir.join(format!("{}.cpp", class.name.to_lowercase()));
+                    write(hpp_path.to_str().unwrap(), &hpp);
+                    write(cpp_path.to_str().unwrap(), &cpp);
+                    println!("generated: {}, {}", hpp_path.display(), cpp_path.display());
+                }
+            }
+
             if needs_object_base {
                 write_object_base(&src_dir, &include_dir);
             }
             let exe_name = if cfg!(windows) { format!("{}.exe", base) } else { base.to_string() };
             let exe_path = bin_dir.join(&exe_name);
-            let main_cpp_path = src_dir.join("entry.cpp");
-            if !no_main {
+            
+            if !unity && !no_main {
+                let main_cpp_path = src_dir.join("entry.cpp");
                 let target = select_entry_target(&classes, &merged);
                 let main_cpp = demo_main_cpp(target, &target.name.to_lowercase());
                 write(main_cpp_path.to_str().unwrap(), &main_cpp);
@@ -358,13 +434,15 @@ run Main
             if staging {
                 do_compile = false;
             }
-            match compile_cpp(&dir, &base, compiler.as_deref(), &stdver, !no_main) {
-                Ok(()) => {
-                    println!("compiled: {}", exe_path.display());
-                    let _ = Command::new(exe_path.to_str().unwrap()).current_dir(&dir).status();
-                }
-                Err(e) => {
-                    eprintln!("skip compile: {}", e);
+            if do_compile {
+                match compile_cpp(&dir, &base, compiler.as_deref(), &stdver, !no_main) {
+                    Ok(()) => {
+                        println!("compiled: {}", exe_path.display());
+                        let _ = Command::new(exe_path.to_str().unwrap()).current_dir(&dir).status();
+                    }
+                    Err(e) => {
+                        eprintln!("skip compile: {}", e);
+                    }
                 }
             }
             return;
@@ -542,7 +620,7 @@ Para compilar, ejecute `build.bat` (Windows) o `./build.sh` (Linux/Mac).
     let exe_name = if cfg!(windows) { format!("{}.exe", base) } else { base.to_string() };
     let exe_path = bin_dir.join(&exe_name);
     let main_cpp_path = src_dir.join("entry.cpp");
-    if !no_main {
+    if !no_main && !unity {
         let target = select_entry_target(&classes, &directives);
         let main_cpp = demo_main_cpp(target, &target.name.to_lowercase());
         write(main_cpp_path.to_str().unwrap(), &main_cpp);
@@ -644,11 +722,17 @@ fn demo_main_cpp(class: &ultracpp::Class, base: &str) -> String {
     let mut s = String::new();
     s.push_str(&format!("#include \"{}.hpp\"\n", base));
     s.push_str("#include <iostream>\n");
+    s.push_str("#ifdef _WIN32\n");
+    s.push_str("#include <windows.h>\n");
+    s.push_str("#endif\n");
     s.push_str("int main() {\n");
+    s.push_str("  #ifdef _WIN32\n");
+    s.push_str("    SetConsoleOutputCP(65001);\n");
+    s.push_str("  #endif\n");
     
-    // Check for explicit entry points first: run_loop, start, main, run
+    // Check for explicit entry points first: run_loop, start, main, run, hola_upp
     let entry_method = class.methods.iter().find(|m| 
-        m.name == "run_loop" || m.name == "start" || m.name == "main" || m.name == "run"
+        m.name == "run_loop" || m.name == "start" || m.name == "main" || m.name == "run" || m.name == "hola_upp"
     );
 
     if let Some(m) = entry_method {
@@ -715,8 +799,9 @@ fn compile_cpp(dir: &Path, base: &str, compiler: Option<&str>, stdver: &str, _ha
     let exe_name = if cfg!(windows) { format!("{}.exe", base) } else { base.to_string() };
     
     if compiler.is_none() || compiler == Some("cl") {
-        if let Ok(()) = tool_detector::compile_with_msvc(dir, base) {
-            return Ok(());
+        match tool_detector::compile_with_msvc(dir, base) {
+            Ok(()) => return Ok(()),
+            Err(e) => eprintln!("MSVC compile failed: {}", e),
         }
     }
     // Try other compilers if requested explicitly

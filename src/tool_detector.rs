@@ -70,44 +70,22 @@ pub fn find_vs_dev_cmd() -> Option<PathBuf> {
     None
 }
 
-pub fn compile_with_msvc(dir: &Path, base: &str) -> Result<(), String> {
-    if let Some(vsdevcmd) = find_vs_dev_cmd() {
-        let exe = format!("build\\bin\\{}.exe", base);
-        let src_dir = dir.join("src");
-        let mut files: Vec<String> = Vec::new();
-        if let Ok(rd) = fs::read_dir(&src_dir) {
-            for e in rd.flatten() {
-                let p = e.path();
-                if let Some(ext) = p.extension() {
-                    if ext.to_string_lossy().eq_ignore_ascii_case("cpp") {
-                        if let Some(n) = p.file_name() {
-                            files.push(format!("src\\{}", n.to_string_lossy()));
-                        }
-                    }
-                }
-            }
-        }
-        if files.is_empty() {
-            return Err(String::from("no .cpp files"));
-        }
-        let file_args = files.join(" ");
-        let cmdline = format!(
-            "call \"{}\" && cl.exe /nologo /std:c++17 /EHsc /I include {} /Fo\"build\\obj\\\\\" /Fe\"{}\"",
-            vsdevcmd.display(),
-            file_args,
-            exe
-        );
-        let out = Command::new("cmd.exe")
+pub fn compile_with_msvc(dir: &Path, _base: &str) -> Result<(), String> {
+    let build_bat = dir.join("build.bat");
+    if build_bat.exists() {
+         let out = Command::new("cmd.exe")
             .current_dir(dir)
-            .args(["/C", &cmdline])
+            .args(["/C", "build.bat"])
             .output()
             .map_err(|e| e.to_string())?;
-        if out.status.success() {
-            return Ok(());
-        }
-        return Err(String::from("MSVC cl.exe failed"));
+         if out.status.success() {
+             return Ok(());
+         }
+         let stdout = String::from_utf8_lossy(&out.stdout);
+         let stderr = String::from_utf8_lossy(&out.stderr);
+         return Err(format!("MSVC build.bat failed:\nSTDOUT:\n{}\nSTDERR:\n{}", stdout, stderr));
     }
-    Err(String::from("VsDevCmd.bat not found"))
+    Err(String::from("build.bat not found (MSVC)"))
 }
 
 pub fn write_build_script(dir: &Path, base: &str) -> Result<(), String> {

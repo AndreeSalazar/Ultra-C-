@@ -1,12 +1,43 @@
 use crate::{Class, Expr, Method, Visibility};
 
 fn cpp_type(t: &str) -> String {
-    match t.trim() {
+    let t = t.trim();
+    if t.starts_with("Vector<") && t.ends_with(">") {
+        let inner = &t[7..t.len()-1];
+        return format!("std::vector<{}>", cpp_type(inner));
+    }
+    if t.starts_with("Map<") && t.ends_with(">") {
+        let inner = &t[4..t.len()-1];
+        // Split by comma respecting nesting (simplistic)
+        let parts: Vec<&str> = inner.split(',').collect();
+        if parts.len() >= 2 {
+            return format!("std::map<{}, {}>", cpp_type(parts[0]), cpp_type(parts[1]));
+        }
+    }
+    if t.starts_with("List<") && t.ends_with(">") {
+        let inner = &t[5..t.len()-1];
+        return format!("std::list<{}>", cpp_type(inner));
+    }
+    if t.starts_with("Optional<") && t.ends_with(">") {
+        let inner = &t[9..t.len()-1];
+        return format!("std::optional<{}>", cpp_type(inner));
+    }
+    match t {
         "String" => "std::string".to_string(),
         "Void" => "void".to_string(),
         "Int" => "int".to_string(),
         "Float" => "float".to_string(),
         "Bool" => "bool".to_string(),
+        "Thread" => "std::thread".to_string(),
+        "Mutex" => "std::mutex".to_string(),
+        "LockGuard" => "std::lock_guard<std::mutex>".to_string(),
+        "Future" => "std::future".to_string(),
+        "Promise" => "std::promise".to_string(),
+        "Atomic" => "std::atomic".to_string(),
+        "Path" => "std::filesystem::path".to_string(),
+        "OfStream" => "std::ofstream".to_string(),
+        "IfStream" => "std::ifstream".to_string(),
+        "Auto" => "auto".to_string(),
         _ => t.to_string(),
     }
 }
@@ -22,6 +53,110 @@ fn cpp_default_init(t: &str) -> String {
     }
 }
 
+pub fn unity_build(classes: &Vec<Class>) -> String {
+    let mut s = String::new();
+    
+    // Standard headers
+    let std_headers = vec![
+        "iostream", "string", "vector", "memory", "algorithm",
+        "map", "list", "optional", "thread", "mutex", "future", "atomic",
+        "filesystem", "fstream", "numeric", "cmath", "cstdio"
+    ];
+
+    for h in &std_headers {
+        s.push_str(&format!("#include <{}>\n", h));
+    }
+    
+    // Extra includes from all classes
+    let mut extra_seen: Vec<String> = std_headers.iter().map(|s| s.to_string()).collect();
+    
+    for c in classes {
+        for inc in &c.extra_includes {
+            if !extra_seen.contains(inc) {
+                s.push_str(&format!("#include <{}>\n", inc));
+                extra_seen.push(inc.clone());
+            }
+        }
+    }
+    s.push_str("\n// Forward Declarations\n");
+    for c in classes {
+        if let Some(ns) = &c.namespace {
+            s.push_str(&format!("namespace {} {{ class {}; }}\n", ns, c.name));
+        } else {
+            s.push_str(&format!("class {};\n", c.name));
+        }
+    }
+    
+    // Group classes by namespace for definitions
+    use std::collections::HashMap;
+    let mut ns_map: HashMap<Option<String>, Vec<&Class>> = HashMap::new();
+    for c in classes {
+        ns_map.entry(c.namespace.clone()).or_insert(Vec::new()).push(c);
+    }
+    
+    // Sort namespaces to ensure deterministic order (None first, then alphabetical)
+    let mut namespaces: Vec<_> = ns_map.keys().cloned().collect();
+    namespaces.sort_by(|a, b| {
+        match (a, b) {
+            (None, None) => std::cmp::Ordering::Equal,
+            (None, Some(_)) => std::cmp::Ordering::Less,
+            (Some(_), None) => std::cmp::Ordering::Greater,
+            (Some(na), Some(nb)) => na.cmp(nb),
+        }
+    });
+
+    s.push_str("\n// Class Definitions\n");
+    for ns in &namespaces {
+        if let Some(n) = ns {
+            s.push_str(&format!("namespace {} {{\n", n));
+        }
+        
+        if let Some(group) = ns_map.get(ns) {
+            for c in group {
+                let h = header(c);
+                // Filter out includes, pragma once, and namespace wrappers
+                let lines: Vec<&str> = h.lines()
+                    .filter(|l| !l.starts_with("#include") && !l.starts_with("#pragma") && !l.starts_with("namespace ") && l != &"}")
+                    .collect();
+                s.push_str(&lines.join("\n"));
+                s.push_str("\n\n");
+            }
+        }
+        
+        if ns.is_some() {
+            s.push_str("}\n");
+        }
+    }
+    
+    s.push_str("\n// Class Implementations\n");
+    for ns in &namespaces {
+        if let Some(n) = ns {
+            s.push_str(&format!("namespace {} {{\n", n));
+        }
+        
+        if let Some(group) = ns_map.get(ns) {
+            for c in group {
+                let src = source(c);
+                // Filter out includes and namespace wrappers
+                let mut lines: Vec<&str> = src.lines()
+                    .filter(|l| !l.starts_with("#include") && !l.starts_with("namespace "))
+                    .collect();
+                if c.namespace.is_some() && lines.last() == Some(&"}") {
+                    lines.pop();
+                }
+                s.push_str(&lines.join("\n"));
+                s.push_str("\n");
+            }
+        }
+        
+        if ns.is_some() {
+            s.push_str("}\n");
+        }
+    }
+    
+    s
+}
+
 pub fn header(c: &Class) -> String {
     let mut h = String::new();
     h.push_str("#pragma once\n");
@@ -29,13 +164,27 @@ pub fn header(c: &Class) -> String {
     h.push_str("#include <vector>\n");
     h.push_str("#include <iostream>\n");
     h.push_str("#include <memory>\n");
+    h.push_str("#include <map>\n");
+    h.push_str("#include <list>\n");
+    h.push_str("#include <optional>\n");
+    h.push_str("#include <thread>\n");
+    h.push_str("#include <mutex>\n");
+    h.push_str("#include <future>\n");
+    h.push_str("#include <atomic>\n");
+    h.push_str("#include <filesystem>\n");
+    h.push_str("#include <fstream>\n");
+    h.push_str("#include <algorithm>\n");
+    h.push_str("#include <numeric>\n");
+    h.push_str("#include <cmath>\n");
+    h.push_str("#include <cstdio>\n");
     
     // Auto-includes for fields
     let mut seen_includes: Vec<String> = Vec::new();
     for f in &c.fields {
         let t = f.ty.trim();
-        if !["Int", "Float", "Bool", "String", "Void"].contains(&t) {
-             let inc = format!("{}.hpp", t.to_lowercase());
+        let base_t = t.split('<').next().unwrap_or(t);
+        if !["Int", "Float", "Bool", "String", "Void", "Vector", "Map", "List", "Optional", "Thread", "Mutex", "LockGuard", "Future", "Promise", "Atomic", "Path", "OfStream", "IfStream", "Auto"].contains(&base_t) {
+             let inc = format!("{}.hpp", base_t.to_lowercase());
              if !seen_includes.contains(&inc) && inc != format!("{}.hpp", c.name.to_lowercase()) {
                   h.push_str(&format!("#include \"{}\"\n", inc));
                   seen_includes.push(inc);
@@ -47,7 +196,7 @@ pub fn header(c: &Class) -> String {
     for m in &c.methods {
         for p in &m.params {
             let t = p.ty.trim();
-            if !["Int", "Float", "Bool", "String", "Void"].contains(&t) {
+            if !["Int", "Float", "Bool", "String", "Void", "Auto"].contains(&t) {
                  let inc = format!("{}.hpp", t.to_lowercase());
                  if !seen_includes.contains(&inc) && inc != format!("{}.hpp", c.name.to_lowercase()) {
                       h.push_str(&format!("#include \"{}\"\n", inc));
@@ -152,7 +301,7 @@ pub fn header(c: &Class) -> String {
 
 fn gen_expr(e: &Expr, c: &Class) -> String {
     match e {
-        Expr::LiteralString(s) => format!("std::string(\"{}\")", s.replace('"', "\\\"")),
+        Expr::LiteralString(s) => format!("\"{}\"", s.replace('"', "\\\"")),
         Expr::LiteralInt(n) => format!("{}", n),
         Expr::LiteralFloat(f) => format!("{}", f),
         Expr::LiteralBool(b) => if *b { "true".to_string() } else { "false".to_string() },
@@ -164,7 +313,7 @@ fn gen_expr(e: &Expr, c: &Class) -> String {
             format!("({}{})", cpp, gen_expr(x, c))
         }
         Expr::Variable(n) => n.clone(),
-        Expr::SelfField(n) => format!("this->{}", n),
+        Expr::SelfField(n) => n.clone(),
         Expr::SelfCall { name, args } => {
             let a: Vec<String> = args.iter().map(|x| gen_expr(x, c)).collect();
             // Basic static check: if method is in class and static, use ClassName::
@@ -173,7 +322,7 @@ fn gen_expr(e: &Expr, c: &Class) -> String {
             if is_static {
                 format!("{}::{}({})", c.name, name, a.join(", "))
             } else {
-                format!("this->{}({})", name, a.join(", "))
+                format!("{}({})", name, a.join(", "))
             }
         }
         Expr::SuperCall { name, args } => {
@@ -185,6 +334,15 @@ fn gen_expr(e: &Expr, c: &Class) -> String {
              }
         }
         Expr::FunctionCall { name, args } => {
+            if name == "print" {
+                 let mut s = "std::cout".to_string();
+                 for arg in args {
+                     s.push_str(" << ");
+                     s.push_str(&gen_expr(arg, c));
+                 }
+                 s.push_str(" << std::endl");
+                 return s;
+            }
             let a: Vec<String> = args.iter().map(|x| gen_expr(x, c)).collect();
             // Replace dot with double colon for likely static calls if it looks like Class.Method
             let cpp_name = if name.contains('.') && name.chars().next().unwrap().is_uppercase() {
@@ -202,7 +360,7 @@ fn gen_expr(e: &Expr, c: &Class) -> String {
             };
             format!("{} {} {}", gen_expr(l, c), cpp_op, gen_expr(r, c))
         }
-        Expr::Concat(l, r) => format!("({} + {})", gen_expr(l, c), gen_expr(r, c)),
+        Expr::Concat(l, r) => format!("(std::string({}) + {})", gen_expr(l, c), gen_expr(r, c)),
         Expr::Native(s) => s.replace("\\\"", "\""),
         _ => "".to_string(), 
     }
@@ -220,10 +378,35 @@ fn gen_stmt(e: &Expr, c: &Class, indent: usize) -> String {
         }
         Expr::FileCall(name) => {
             let mut out = String::new();
-            if name.to_lowercase() == "hola" {
-                out.push_str(&format!("{}std::cout << \"Hola mundo\" << std::endl;\n", prefix));
+            // Check if there is a method in this class with the name "{name}_upp" or "{name}"
+            let target_method_upp = format!("{}_upp", name.replace('.', "_"));
+            let target_method_std = name.replace('.', "_");
+
+            let has_upp = c.methods.iter().any(|m| m.name == target_method_upp);
+            let has_std = c.methods.iter().any(|m| m.name == target_method_std);
+
+            if has_upp {
+                // Call the method
+                let is_static = c.methods.iter().find(|m| m.name == target_method_upp).unwrap().is_static;
+                if is_static {
+                    out.push_str(&format!("{}{}::{}();\n", prefix, c.name, target_method_upp));
+                } else {
+                    out.push_str(&format!("{}{}();\n", prefix, target_method_upp));
+                }
+            } else if has_std {
+                let is_static = c.methods.iter().find(|m| m.name == target_method_std).unwrap().is_static;
+                if is_static {
+                    out.push_str(&format!("{}{}::{}();\n", prefix, c.name, target_method_std));
+                } else {
+                    out.push_str(&format!("{}{}();\n", prefix, target_method_std));
+                }
             } else {
-                out.push_str(&format!("{}std::cout << \"Run {}.upp\" << std::endl;\n", prefix, name));
+                 // Fallback: Just print for now, or assume it's an external call
+                 if name.to_lowercase() == "hola" {
+                     out.push_str(&format!("{}std::cout << \"Hola mundo\" << std::endl;\n", prefix));
+                 } else {
+                     out.push_str(&format!("{}std::cout << \"Call {}.upp\" << std::endl;\n", prefix, name));
+                 }
             }
             out
         }
@@ -280,7 +463,15 @@ pub fn source(c: &Class) -> String {
     let mut local_includes: Vec<String> = Vec::new();
     let mut need_win = false;
     fn is_builtin(t: &str) -> bool {
-        matches!(t.trim(), "Int" | "Float" | "Bool" | "String" | "Void" | "int" | "float" | "bool" | "double" | "Double")
+        matches!(t.trim(), "Int" | "Float" | "Bool" | "String" | "Void" | "int" | "float" | "bool" | "double" | "Double" | "Auto")
+    }
+    fn is_builtin_class_name(n: &str) -> bool {
+        matches!(n.trim(), 
+            "Int" | "Float" | "Bool" | "String" | "Void" |
+            "Vector" | "Map" | "List" | "Optional" |
+            "Thread" | "Mutex" | "LockGuard" | "Future" | "Promise" | "Atomic" |
+            "Path" | "OfStream" | "IfStream" | "Auto" | "Double" | "Float" | "Bool" | "Int"
+        )
     }
     fn collect_types(e: &Expr, acc: &mut Vec<String>) {
         match e {
@@ -306,6 +497,56 @@ pub fn source(c: &Class) -> String {
             _ => {}
         }
     }
+    fn collect_class_refs(e: &Expr, acc: &mut Vec<String>, self_lower: &str) {
+        match e {
+            Expr::FunctionCall { name, args } => {
+                // Consider names that look like class usage
+                let mut candidates: Vec<String> = Vec::new();
+                if name.contains('.') {
+                    let parts: Vec<&str> = name.split('.').collect();
+                    if parts.len() >= 2 {
+                        candidates.push(parts[parts.len()-2].to_string());
+                    } else {
+                        candidates.push(parts[0].to_string());
+                    }
+                } else {
+                    candidates.push(name.clone());
+                }
+                for cand in candidates {
+                    if let Some(ch) = cand.chars().next() {
+                        if ch.is_uppercase() && !is_builtin_class_name(&cand) {
+                            let low = cand.to_lowercase();
+                            if !acc.iter().any(|x| x == &low) && low != self_lower {
+                                acc.push(low);
+                            }
+                        }
+                    }
+                }
+                for a in args {
+                    collect_class_refs(a, acc, self_lower);
+                }
+            }
+            Expr::Concat(l, r) => {
+                collect_class_refs(l, acc, self_lower);
+                collect_class_refs(r, acc, self_lower);
+            }
+            Expr::Block(stmts) => {
+                for s in stmts { collect_class_refs(s, acc, self_lower); }
+            }
+            Expr::If { then_body, else_body, .. } => {
+                collect_class_refs(then_body, acc, self_lower);
+                if let Some(e) = else_body { collect_class_refs(e, acc, self_lower); }
+            }
+            Expr::While { body, .. } => collect_class_refs(body, acc, self_lower),
+            Expr::Return(Some(v)) => collect_class_refs(v, acc, self_lower),
+            Expr::VarDecl { value, .. } => {
+                if let Some(v) = value {
+                    collect_class_refs(v, acc, self_lower);
+                }
+            }
+            _ => {}
+        }
+    }
     fn contains_win_native(e: &Expr) -> bool {
         match e {
             Expr::Native(s) => s.contains("_kbhit") || s.contains("_getch") || s.contains("Sleep"),
@@ -323,6 +564,50 @@ pub fn source(c: &Class) -> String {
     for m in &c.methods {
         collect_types(&m.body, &mut local_includes);
         if contains_win_native(&m.body) { need_win = true; }
+        let mut refs: Vec<String> = Vec::new();
+        collect_class_refs(&m.body, &mut refs, &c.name.to_lowercase());
+        for r in refs {
+            if r != c.name.to_lowercase() {
+                s.push_str(&format!("#include \"{}.hpp\"\n", r));
+            }
+        }
+        // Fallback: scan generated code for static class usages like Utils::Version::...
+        let body_code = gen_stmt(&m.body, c, 1);
+        let mut scan_refs: Vec<String> = Vec::new();
+        let bytes = body_code.as_bytes();
+        let mut i = 0usize;
+        while i + 1 < bytes.len() {
+            if bytes[i] == b':' && bytes[i+1] == b':' {
+                // Capture name after ::
+                let mut j = i + 2;
+                let mut name = String::new();
+                while j < bytes.len() {
+                    let ch = bytes[j] as char;
+                    if ch.is_alphanumeric() || ch == '_' {
+                        name.push(ch);
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                }
+                if !name.is_empty() {
+                    if let Some(first) = name.chars().next() {
+                        if first.is_uppercase() && !is_builtin_class_name(&name) {
+                            let low = name.to_lowercase();
+                            if low != c.name.to_lowercase() && !scan_refs.iter().any(|x| x == &low) {
+                                scan_refs.push(low);
+                            }
+                        }
+                    }
+                }
+                i = j;
+            } else {
+                i += 1;
+            }
+        }
+        for r in scan_refs {
+            s.push_str(&format!("#include \"{}.hpp\"\n", r));
+        }
     }
     for inc in local_includes {
         if inc.to_lowercase() != c.name.to_lowercase() {
@@ -393,6 +678,7 @@ pub fn source(c: &Class) -> String {
     }
     for m in &c.methods {
         s.push_str(&method_impl(c, m));
+        // Ensure method is closed properly if method_impl didn't close it (it does now)
     }
     if c.namespace.is_some() {
         s.push_str("}\n");
@@ -409,9 +695,7 @@ fn method_impl(c: &Class, m: &Method) -> String {
     }
     out.push_str(&params.join(", "));
     out.push_str(") {\n");
-    
     out.push_str(&gen_stmt(&m.body, c, 1));
-    
     out.push_str("}\n");
     out
 }

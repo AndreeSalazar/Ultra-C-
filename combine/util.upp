@@ -1,5 +1,5 @@
 namespace Utils
 
 class Version:
-  def version() -> String:
+  static current() -> String:
     return "1.0.0"

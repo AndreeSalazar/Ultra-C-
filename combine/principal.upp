@@ -1,12 +1,31 @@
-namespace Juego
+namespace Juego // Namespace: Agrupa tus clases para evitar conflictos de nombres (como una "carpeta" para tu código)
 std
 import hola.upp
 import util.upp@1.0.0
 
 class Principal:
-  def run(self) -> Void:
-    native "std::cout << Version.version() << std::endl;"
-    hola.upp()
-    return ""
+  // hola.upp() se convierte internamente en hola_upp()
+  // Es el punto de entrada que definiste en ideas_sintaxis.md
+  hola.upp():
+    print("Versión actual: " + Utils.Version.current())
+    
+    // Inicialización simplificada (Type Inference)
+    h := Hola("como están")
+    
+    print(h.greet())
+
+  run():
+    print("--- Iniciando Ejecución ---")
+    // Usamos 'call' para invocar el método hola.upp() de forma explicita y limpia
+    call hola.upp
+    call hola.upp
+    call hola.upp
+    call hola.upp
+    call hola.upp
+    call hola.upp
+    call hola.upp
+    call hola.upp
+    call hola.upp
+    print("--- Fin Ejecución ---")
 
 entry Principal

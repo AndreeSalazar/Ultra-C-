@@ -1,6 +1,5 @@
 class Hola:
-  name String
+  name: String
 
-  greet -> String
-    "Hola " + name
-
+  greet() -> String:
+    return "Hola " + name

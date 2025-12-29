@@ -67,23 +67,23 @@ fn parse_expr(s: &str) -> Expr {
         vec!["*", "/", "%"],
     ];
 
-    for level in &ops {
+        for level in &ops {
         for op in level {
             // Find op not in parens/quotes
             let mut depth = 0;
             let mut in_quote = false;
-            let chars: Vec<char> = s.chars().collect();
-            let mut i = 0;
-            while i < chars.len() {
-                let c = chars[i];
+            let char_indices: Vec<(usize, char)> = s.char_indices().collect();
+            let mut k = 0;
+            while k < char_indices.len() {
+                let (byte_idx, c) = char_indices[k];
                 if c == '"' { in_quote = !in_quote; }
                 else if !in_quote {
                     if c == '(' { depth += 1; }
                     else if c == ')' { depth -= 1; }
-                    else if depth == 0 && s[i..].starts_with(op) {
+                    else if depth == 0 && s[byte_idx..].starts_with(op) {
                         let is_match = if op.len() == 1 {
-                             if i + 1 < chars.len() {
-                                 let next = chars[i+1];
+                             if k + 1 < char_indices.len() {
+                                 let (_, next) = char_indices[k+1];
                                  if *op == "<" && next == '=' { false }
                                  else if *op == ">" && next == '=' { false }
                                  else if *op == "!" && next == '=' { false }
@@ -93,18 +93,22 @@ fn parse_expr(s: &str) -> Expr {
                         } else { true };
                         let is_alpha = op.chars().all(|ch| ch.is_ascii_alphabetic());
                         let left_ok = if is_alpha {
-                            if i == 0 { true } else { !(chars[i-1].is_ascii_alphanumeric() || chars[i-1] == '_') }
+                            if k == 0 { true } else { 
+                                let (_, prev) = char_indices[k-1];
+                                !(prev.is_ascii_alphanumeric() || prev == '_') 
+                            }
                         } else { true };
                         let right_ok = if is_alpha {
-                            let j = i + op.len();
-                            if j >= chars.len() { true } else { !(chars[j].is_ascii_alphanumeric() || chars[j] == '_') }
+                            let j = k + op.len();
+                            if j >= char_indices.len() { true } else { 
+                                let (_, next) = char_indices[j];
+                                !(next.is_ascii_alphanumeric() || next == '_') 
+                            }
                         } else { true };
                         
-                        // FIX: If op is "=", we must ensure it's not preceded by <, >, !, = 
-                        // to avoid splitting <=, >=, !=, ==
                         let is_safe = if *op == "=" {
-                            if i > 0 {
-                                let prev = chars[i-1];
+                            if k > 0 {
+                                let (_, prev) = char_indices[k-1];
                                 if prev == '<' || prev == '>' || prev == '!' || prev == '=' {
                                     false
                                 } else { true }
@@ -112,8 +116,8 @@ fn parse_expr(s: &str) -> Expr {
                         } else { true };
 
                         if is_match && is_safe && left_ok && right_ok {
-                            let left = trim(&s[..i]);
-                            let right = trim(&s[i + op.len()..]);
+                            let left = trim(&s[..byte_idx]);
+                            let right = trim(&s[byte_idx + op.len()..]);
                             return Expr::BinaryOp(
                                 Box::new(parse_expr(&left)),
                                 op.to_string(),
@@ -122,58 +126,77 @@ fn parse_expr(s: &str) -> Expr {
                         }
                     }
                 }
-                i += 1;
+                k += 1;
             }
         }
     }
 
     // Function call / Method call
-    if let Some(paren_pos) = s.rfind('(') {
-        if s.ends_with(')') {
-            let name_part = &s[..paren_pos];
-            // Check if name_part is valid identifier or dotted
-            // self.foo(args)
-            // super().foo(args) -> specific handling?
-            // foo(args)
-            
-            let args_part = &s[paren_pos+1..s.len()-1];
-            let mut args = Vec::new();
-            let mut start = 0;
-            let mut depth = 0;
-            let mut in_quote = false;
-            let a_chars: Vec<char> = args_part.chars().collect();
-            for i in 0..a_chars.len() {
-                let c = a_chars[i];
-                if c == '"' { in_quote = !in_quote; }
-                else if !in_quote {
-                    if c == '(' { depth += 1; }
-                    else if c == ')' { depth -= 1; }
-                    else if c == ',' && depth == 0 {
-                        args.push(parse_expr(&args_part[start..i]));
-                        start = i + 1;
-                    }
+    if s.ends_with(')') {
+        // Find matching opening parenthesis from the end
+        let mut depth = 0;
+        let mut open_pos = None;
+        let char_indices: Vec<(usize, char)> = s.char_indices().collect();
+        for k in (0..char_indices.len()).rev() {
+            let (byte_idx, c) = char_indices[k];
+            if c == ')' {
+                depth += 1;
+            } else if c == '(' {
+                depth -= 1;
+                if depth == 0 {
+                    open_pos = Some(byte_idx);
+                    break;
                 }
             }
-            if start < args_part.len() || (start == args_part.len() && !args.is_empty()) { // Handle empty args case properly
-                 let last = args_part[start..].trim();
-                 if !last.is_empty() {
-                     args.push(parse_expr(last));
-                 }
-            }
+        }
 
-            if name_part.starts_with("self.") {
-                let mname = name_part["self.".len()..].to_string();
-                return Expr::SelfCall { name: mname, args };
-            } else if name_part.starts_with("super().") {
-                let mname = name_part["super().".len()..].to_string();
-                return Expr::SuperCall { name: mname, args };
-            } else if name_part.contains('.') {
-                 // Object call: obj.method(args) -> We don't have ObjectCall in Expr yet, 
-                 // treat as function call or generic?
-                 // Let's map to FunctionCall for now, codegen will handle "obj.method" as name.
-                 return Expr::FunctionCall { name: name_part.to_string(), args };
+        if let Some(paren_pos) = open_pos {
+            let name_part = &s[..paren_pos];
+            let args_part = &s[paren_pos+1..s.len()-1];
+            
+            // Check if name_part is valid identifier or dotted (or empty for grouping)
+            let is_valid_name = if name_part.is_empty() {
+                true // (expr)
             } else {
-                 return Expr::FunctionCall { name: name_part.to_string(), args };
+                // Check chars. allow self., super., etc.
+                name_part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+            };
+
+            if is_valid_name {
+                let mut args = Vec::new();
+                let mut start = 0;
+                let mut depth = 0;
+                let mut in_quote = false;
+                let a_chars: Vec<char> = args_part.chars().collect();
+                for i in 0..a_chars.len() {
+                    let c = a_chars[i];
+                    if c == '"' { in_quote = !in_quote; }
+                    else if !in_quote {
+                        if c == '(' { depth += 1; }
+                        else if c == ')' { depth -= 1; }
+                        else if c == ',' && depth == 0 {
+                            args.push(parse_expr(&args_part[start..i]));
+                            start = i + 1;
+                        }
+                    }
+                }
+                if start < args_part.len() || (start == args_part.len() && !args.is_empty()) {
+                     let last = args_part[start..].trim();
+                     if !last.is_empty() {
+                         args.push(parse_expr(last));
+                     }
+                }
+
+                if name_part.starts_with("self.") {
+                    let mname = name_part["self.".len()..].to_string();
+                    return Expr::SelfCall { name: mname, args };
+                } else if name_part.starts_with("super().") {
+                    let mname = name_part["super().".len()..].to_string();
+                    return Expr::SuperCall { name: mname, args };
+                } else {
+                     // Includes obj.method(args) and empty name (grouping)
+                     return Expr::FunctionCall { name: name_part.to_string(), args };
+                }
             }
         }
     }
@@ -200,7 +223,22 @@ fn parse_block(lines: &[&str], base_indent: usize) -> (Expr, usize) {
     let mut i = 0;
     while i < lines.len() {
         let line = lines[i];
-        let trimmed = line.trim();
+        let mut trimmed = line.trim();
+        // Remove comments
+        if let Some(comment_start) = trimmed.find("//") {
+             // ensure not inside string? 
+             // simplistic approach: split on // if not in string.
+             // But for now, let's just assume // starts comment if it's not inside a string logic which is hard to check here easily without full parse.
+             // However, `parse_expr` handles strings. 
+             // Let's just check if it STARTS with //
+             if comment_start == 0 {
+                 i += 1;
+                 continue;
+             }
+             // If it has // later, we should probably strip it.
+             trimmed = trimmed[..comment_start].trim();
+        }
+
         if trimmed.is_empty() {
             i += 1;
             continue;
@@ -217,6 +255,11 @@ fn parse_block(lines: &[&str], base_indent: usize) -> (Expr, usize) {
             } else {
                 stmts.push(Expr::Return(Some(Box::new(parse_expr(&val)))));
             }
+            i += 1;
+        } else if trimmed.starts_with("call ") {
+            let name = trim(&trimmed["call ".len()..]).replace('.', "_");
+            // If it's a file call, we might want to map it to the generated method name
+            stmts.push(Expr::FileCall(name));
             i += 1;
         } else if trimmed.starts_with("if ") {
             let cond_str = trim(&trimmed["if ".len()..trimmed.len()-1]); // assume ends with :
@@ -341,36 +384,66 @@ fn parse_block(lines: &[&str], base_indent: usize) -> (Expr, usize) {
                 }
             }
             let mut is_decl = false;
+            
+            // Check for := (Type Inference Declaration)
+            if let Some(walrus) = trimmed.find(":=") {
+                let name = trim(&trimmed[..walrus]);
+                let val_str = trim(&trimmed[walrus+2..]);
+                if !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                     stmts.push(Expr::VarDecl {
+                         name,
+                         ty: "Auto".to_string(),
+                         value: Some(Box::new(parse_expr(&val_str))),
+                     });
+                     is_decl = true;
+                     i += 1;
+                }
+            }
+
             // Simple check: colon before equals
-            if let Some(colon) = trimmed.find(':') {
-                 if let Some(eq) = trimmed.find('=') {
-                     if colon < eq {
-                         if !trimmed[..colon].contains('"') {
-                             let name = trim(&trimmed[..colon]);
-                             let ty = trim(&trimmed[colon+1..eq]);
-                             let val_str = trim(&trimmed[eq+1..]);
-                             stmts.push(Expr::VarDecl { 
-                                 name, 
-                                 ty, 
-                                 value: Some(Box::new(parse_expr(&val_str))) 
-                             });
-                             is_decl = true;
-                             i += 1;
+            if !is_decl {
+                if let Some(colon) = trimmed.find(':') {
+                     // Check if it is double colon (scope resolution)
+                     let is_double = (colon + 1 < trimmed.len() && trimmed.as_bytes()[colon+1] == b':') ||
+                                     (colon > 0 && trimmed.as_bytes()[colon-1] == b':');
+                     
+                     if !is_double {
+                         // Check if name is valid identifier to avoid confusing with method calls containing ::
+                         let potential_name = trim(&trimmed[..colon]);
+                         let is_ident = !potential_name.is_empty() && potential_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    
+                         if is_ident {
+                             if let Some(eq) = trimmed.find('=') {
+                                 if colon < eq {
+                                     if !trimmed[..colon].contains('"') {
+                                         let name = potential_name;
+                                         let ty = trim(&trimmed[colon+1..eq]);
+                                         let val_str = trim(&trimmed[eq+1..]);
+                                         stmts.push(Expr::VarDecl { 
+                                             name, 
+                                             ty, 
+                                             value: Some(Box::new(parse_expr(&val_str))) 
+                                         });
+                                         is_decl = true;
+                                         i += 1;
+                                     }
+                                 }
+                             } else {
+                                 if !trimmed[..colon].contains('"') {
+                                     let name = potential_name;
+                                     let ty = trim(&trimmed[colon+1..]);
+                                     stmts.push(Expr::VarDecl {
+                                         name,
+                                         ty,
+                                         value: None,
+                                     });
+                                     is_decl = true;
+                                     i += 1;
+                                 }
+                             }
                          }
                      }
-                 } else {
-                     if !trimmed[..colon].contains('"') {
-                         let name = trim(&trimmed[..colon]);
-                         let ty = trim(&trimmed[colon+1..]);
-                         stmts.push(Expr::VarDecl {
-                             name,
-                             ty,
-                             value: None,
-                         });
-                         is_decl = true;
-                         i += 1;
-                     }
-                 }
+                }
             }
 
             if !is_decl {
@@ -429,22 +502,41 @@ pub fn parse(input: &str) -> Class {
                 if c == "public:" { current_vis = Visibility::Public; i+=1; continue; }
                 if c == "private:" { current_vis = Visibility::Private; i+=1; continue; }
 
-                if c.starts_with("def ") {
+                let paren_pos = c.find('(');
+                let colon_pos = c.find(':');
+                
+                let is_method_syntax = if let Some(pp) = paren_pos {
+                     if let Some(cp) = colon_pos {
+                         cp > pp // Colon after paren -> Method (e.g. "run():")
+                     } else {
+                         false // No colon -> Syntax error or incomplete
+                     }
+                } else {
+                     false // No paren -> Field (e.g. "x: Int")
+                };
+
+                if c.starts_with("def ") || is_method_syntax {
                     let def_indent = ind;
-                    let sig = c["def ".len()..].to_string();
+                    let sig = if c.starts_with("def ") {
+                        c["def ".len()..].to_string()
+                    } else {
+                        c.to_string()
+                    };
+                    
                     // parse signature
-                    let mut mname = String::new();
+                    let mut mname;
                     let mut params = Vec::new();
                     let mut ret_type = "Void".to_string();
                     let mut has_self = false;
 
                     if let Some(paren) = sig.find('(') {
-                        mname = trim(&sig[..paren]);
+                        mname = trim(&sig[..paren]).replace('.', "_");
                         if let Some(end) = sig[paren+1..].find(')') {
                             let end_abs = paren + 1 + end;
                             let args = &sig[paren+1..end_abs];
                             for arg in args.split(',') {
                                 let arg = trim(arg);
+                                if arg.is_empty() { continue; }
                                 if arg == "self" { has_self = true; continue; }
                                 let parts: Vec<&str> = arg.split(':').collect();
                                 if parts.len() == 2 {
@@ -457,7 +549,17 @@ pub fn parse(input: &str) -> Class {
                             }
                         }
                     } else {
-                        mname = trim(sig.trim_end_matches(':'));
+                        mname = trim(sig.trim_end_matches(':')).replace('.', "_");
+                    }
+
+                    // Handle 'static' prefix for methods
+                    if mname.starts_with("static ") {
+                        mname = trim(&mname["static ".len()..]);
+                        // If explicit static, force no self
+                        has_self = false;
+                    } else if !c.starts_with("def ") {
+                        // Implicit self for methods without 'def' and not static
+                        has_self = true;
                     }
 
                     i += 1;
@@ -591,7 +693,10 @@ pub fn parse_all(input: &str) -> Vec<Class> {
 pub fn scan_directives(input: &str) -> Directives {
     let mut d = Directives::default();
     for line in input.lines() {
-        let c = line.trim();
+        let mut c = line.trim();
+        if let Some(comment_start) = c.find("//") {
+            c = c[..comment_start].trim();
+        }
         if c.is_empty() { continue; }
         if let Some(v) = c.strip_prefix("use ") { d.uses.push(v.trim().to_string()); }
         else if let Some(v) = c.strip_prefix("profile ") { d.profiles.push(v.trim().to_string()); }
