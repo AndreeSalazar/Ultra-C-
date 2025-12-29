@@ -16,6 +16,9 @@ Transpilador en Rust que convierte un lenguaje OOP puro con sintaxis tipo Python
 - Compilación integrada:
   - Detecta Visual Studio Build Tools (VsDevCmd.bat) y compila con `cl.exe`
   - Alternativas: intenta `g++` o `clang++` si están en PATH
+ - Métricas opcionales y staging:
+   - `report.json` con conteos y tiempos (`--bench` o `--staging`)
+   - `build.sh` generado para Unix
 
 ## Requisitos
 - Rust (cargo)
@@ -41,17 +44,28 @@ Transpilador en Rust que convierte un lenguaje OOP puro con sintaxis tipo Python
      - `dist/hola/hola.cpp`
      - `dist/hola/main.cpp`
      - `dist/hola/build.bat`
+      - `dist/hola/build.sh`
 4. Compilar C++ (MSVC):
    - Abrir "Developer Command Prompt for VS" o usar PowerShell
    - `cd dist/hola`
    - `.\build.bat`
    - Ejecutar:
    - `.\hola.exe`
+5. Métricas de ejecución:
+   - Activar benchmarks: `cargo run -- hola.upp dist --bench`
+   - Ver reporte: `dist/hola/report.json`
 
 ## CLI
 - `ultracpp <input.upp> [outdir]`
   - Si no se especifica `outdir`, se usa `dist/`
   - Se crea una carpeta `dist/<base>/` por cada `.upp`
+ - Flags:
+   - `--compile` intenta compilar y ejecutar el binario generado
+   - `--no-main` evita generar `main.cpp`
+   - `--compiler cl|g++|clang++` fuerza compilador específico
+   - `--std c++17|c++20` selecciona estándar C++
+   - `--bench` escribe `report.json` con tiempos y conteos
+   - `--staging` usa `staging/<base>/` y escribe `report.json`
 
 ## Ejemplo
 - Entrada: `hola.upp`
@@ -66,8 +80,13 @@ Transpilador en Rust que convierte un lenguaje OOP puro con sintaxis tipo Python
   - Generador C++: [src/codegen.rs](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/src/codegen.rs)
   - CLI: [src/main.rs](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/src/main.rs)
   - Detector MSVC: [src/tool_detector.rs](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/src/tool_detector.rs)
+ - API de librería:
+   - Includes automáticos: [resolve_includes](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/src/lib.rs#L58-L100)
 - Pruebas:
   - [tests/transpile.rs](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/tests/transpile.rs)
+
+## Roadmap
+- Ver el plan completo en [ROADMAP.md](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/ROADMAP.md)
 
 ## Subir a GitHub
 1. Inicializar git:

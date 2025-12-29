@@ -3,9 +3,16 @@ pub mod codegen;
 pub mod tool_detector;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Visibility {
+    Public,
+    Private,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Field {
     pub name: String,
     pub ty: String,
+    pub vis: Visibility,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,24 +21,87 @@ pub struct Param {
     pub ty: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     LiteralString(String),
+    LiteralInt(i64),
+    LiteralBool(bool),
+    LiteralFloat(f64),
     SelfField(String),
+    SelfCall { name: String, args: Vec<Expr> },
+    SuperCall { name: String, args: Vec<Expr> },
     Concat(Box<Expr>, Box<Expr>),
+    Native(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Method {
     pub name: String,
     pub return_type: String,
     pub params: Vec<Param>,
     pub body: Expr,
+    pub is_static: bool,
+    pub vis: Visibility,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Class {
     pub name: String,
+    pub base: Option<String>,
     pub fields: Vec<Field>,
     pub methods: Vec<Method>,
+    pub ctor_params: Option<Vec<Param>>,
+    pub ctor_body: Option<Expr>,
+    pub extra_includes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Directives {
+    pub uses: Vec<String>,
+    pub profiles: Vec<String>,
+    pub capabilities: Vec<String>,
+    pub entry: Option<String>,
+    pub global_base: bool,
+}
+
+pub fn resolve_includes(d: &Directives) -> Vec<String> {
+    let mut set: Vec<String> = Vec::new();
+    let add = |set: &mut Vec<String>, s: &str| {
+        if !set.iter().any(|x| x == s) {
+            set.push(s.to_string());
+        }
+    };
+    for p in &d.profiles {
+        match p.as_str() {
+            "std" => {
+                add(&mut set, "string");
+                add(&mut set, "memory");
+                add(&mut set, "iostream");
+            }
+            "math" => add(&mut set, "cmath"),
+            _ => {}
+        }
+    }
+    for u in &d.uses {
+        match u.as_str() {
+            "std" => {
+                add(&mut set, "string");
+                add(&mut set, "memory");
+                add(&mut set, "iostream");
+            }
+            "std::io" | "io" => add(&mut set, "iostream"),
+            "std::string" | "string" => add(&mut set, "string"),
+            "std::vector" | "vector" => add(&mut set, "vector"),
+            _ => {}
+        }
+    }
+    for c in &d.capabilities {
+        match c.as_str() {
+            "io" => add(&mut set, "iostream"),
+            "string" => add(&mut set, "string"),
+            "vector" => add(&mut set, "vector"),
+            _ => {}
+        }
+    }
+    set
 }

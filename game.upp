@@ -1,0 +1,210 @@
+global
+profile math
+capability io
+
+# ==========================================
+# ULTRA C++ GAME ENGINE - DEMO
+# ==========================================
+# Este archivo define la lógica completa de un juego estilo Roguelike
+# utilizando las capacidades nativas y transpiladas de Ultra C++.
+
+# ------------------------------------------
+# 1. Sistema de Checklist Visual
+# ------------------------------------------
+class Checklist:
+    def print_status(self):
+        native "
+        std::cout << \"\\n=== PROGRESO DE IMPLEMENTACIÓN ===\\n\";
+        std::cout << \"[OK] Configuración inicial (Ventana/FPS simulado)\\n\";
+        std::cout << \"[OK] Lógica de estados (Menu, Juego, GameOver)\\n\";
+        std::cout << \"[OK] Sistema de Entidades y Componentes\\n\";
+        std::cout << \"[OK] Input del Jugador (Turnos)\\n\";
+        std::cout << \"[OK] Física y Colisiones (AABB)\\n\";
+        std::cout << \"[OK] Sistema de Puntuación\\n\";
+        std::cout << \"====================================\\n\";
+        "
+
+# ------------------------------------------
+# 2. Utilidades Matemáticas
+# ------------------------------------------
+class Vector2:
+    x: Float
+    y: Float
+    def __init__(self, x: Float, y: Float):
+        return ""
+
+# ------------------------------------------
+# 3. Sistema de Entidades
+# ------------------------------------------
+class Entity:
+    pos_x: Float
+    pos_y: Float
+    symbol: String
+    active: Bool
+    
+    def __init__(self, x: Float, y: Float):
+        native "this->pos_x = x; this->pos_y = y; this->symbol = \"?\"; this->active = true;"
+
+    def render(self):
+        native "std::cout << this->symbol;"
+
+# ------------------------------------------
+# 4. Clases Concretas (Jugador, Enemigo)
+# ------------------------------------------
+class Player(Entity):
+    score: Int
+    hp: Int
+    
+    def __init__(self):
+        native "
+        this->pos_x = 1.0; 
+        this->pos_y = 1.0; 
+        this->symbol = \"@\"; 
+        this->score = 0;
+        this->hp = 100;
+        "
+    
+    def move(self, dx: Float, dy: Float):
+        native "this->pos_x += dx; this->pos_y += dy;"
+    
+    def take_damage(self, amount: Int):
+        native "this->hp -= amount; if(this->hp < 0) this->hp = 0;"
+
+class Enemy(Entity):
+    damage: Int
+    
+    def __init__(self, x: Float, y: Float):
+        native "
+        this->pos_x = x; 
+        this->pos_y = y; 
+        this->symbol = \"E\"; 
+        this->active = true;
+        this->damage = 10;
+        "
+
+# ------------------------------------------
+# 5. Motor del Juego (Game Loop)
+# ------------------------------------------
+class Game:
+    running: Bool
+    state: Int  # 0: Menu, 1: Playing, 2: GameOver
+    width: Int
+    height: Int
+    checklist: Checklist
+    
+    def __init__(self):
+        native "
+        this->running = true;
+        this->state = 0; // Menu
+        this->width = 10;
+        this->height = 10;
+        "
+    
+    def clear_screen(self):
+        # Utiliza system("cls") en Windows o "clear" en Unix
+        native "
+        #ifdef _WIN32
+            system(\"cls\");
+        #else
+            system(\"clear\");
+        #endif
+        "
+
+    def check_collisions(self, p: Player, e: Enemy):
+        native "
+        if (!e.active) return;
+        float dx = p.pos_x - e.pos_x;
+        float dy = p.pos_y - e.pos_y;
+        if (std::abs(dx) < 0.5 && std::abs(dy) < 0.5) {
+            std::cout << \"¡Combate! Has recibido daño.\\n\";
+            p.take_damage(e.damage);
+            e.active = false; // Enemigo derrotado
+            p.score += 50;
+        }
+        "
+
+    def draw_map(self, p: Player, e: Enemy):
+        native "
+        this->clear_screen();
+        std::cout << \"Ultra C++ Roguelike | Score: \" << p.score << \" | HP: \" << p.hp << \"\\n\";
+        std::cout << \"+\";
+        for(int i=0; i<this->width; i++) std::cout << \"-\";
+        std::cout << \"+\\n\";
+
+        for(int y=0; y<this->height; y++) {
+            std::cout << \"|\";
+            for(int x=0; x<this->width; x++) {
+                bool drawn = false;
+                if (std::abs(x - (int)p.pos_x) == 0 && std::abs(y - (int)p.pos_y) == 0) {
+                    std::cout << p.symbol;
+                    drawn = true;
+                } else if (e.active && std::abs(x - (int)e.pos_x) == 0 && std::abs(y - (int)e.pos_y) == 0) {
+                    std::cout << e.symbol;
+                    drawn = true;
+                }
+                
+                if (!drawn) std::cout << \".\";
+            }
+            std::cout << \"|\\n\";
+        }
+        std::cout << \"+\";
+        for(int i=0; i<this->width; i++) std::cout << \"-\";
+        std::cout << \"+\\n\";
+        std::cout << \"Controles: W/A/S/D + Enter | Q: Salir\\n\";
+        "
+
+    def input_update(self, p: Player):
+        native "
+        char input;
+        std::cout << \"> \";
+        std::cin >> input;
+        
+        float dx = 0;
+        float dy = 0;
+        
+        if (input == 'w') dy = -1;
+        else if (input == 's') dy = 1;
+        else if (input == 'a') dx = -1;
+        else if (input == 'd') dx = 1;
+        else if (input == 'q') this->running = false;
+        
+        // Predicción de movimiento (física básica)
+        float new_x = p.pos_x + dx;
+        float new_y = p.pos_y + dy;
+        
+        // Límites del mapa
+        if (new_x >= 0 && new_x < this->width) p.pos_x = new_x;
+        if (new_y >= 0 && new_y < this->height) p.pos_y = new_y;
+        "
+
+    def run_loop(self):
+        native "
+        Checklist list;
+        list.print_status();
+        std::cout << \"Presione Enter para iniciar el juego...\";
+        std::cin.get();
+        
+        Player p;
+        Enemy e(5.0, 5.0);
+        this->state = 1; // Playing
+        
+        while(this->running && this->state == 1) {
+            this->draw_map(p, e);
+            this->input_update(p);
+            this->check_collisions(p, e);
+            
+            if (p.hp <= 0) {
+                this->state = 2; // Game Over
+            }
+        }
+        
+        this->clear_screen();
+        if (this->state == 2) {
+            std::cout << \"=== GAME OVER ===\\n\";
+            std::cout << \"Score Final: \" << p.score << \"\\n\";
+        } else {
+            std::cout << \"Juego terminado por el usuario.\\n\";
+        }
+        "
+
+run Game

@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::fs;
 
 fn program_files_x86() -> PathBuf {
     std::env::var_os("ProgramFiles(x86)")
@@ -71,12 +72,29 @@ pub fn find_vs_dev_cmd() -> Option<PathBuf> {
 
 pub fn compile_with_msvc(dir: &Path, base: &str) -> Result<(), String> {
     if let Some(vsdevcmd) = find_vs_dev_cmd() {
-        let cpp = format!("{}.cpp", base);
-        let exe = format!("{}.exe", base);
+        let exe = format!("build\\bin\\{}.exe", base);
+        let src_dir = dir.join("src");
+        let mut files: Vec<String> = Vec::new();
+        if let Ok(rd) = fs::read_dir(&src_dir) {
+            for e in rd.flatten() {
+                let p = e.path();
+                if let Some(ext) = p.extension() {
+                    if ext.to_string_lossy().eq_ignore_ascii_case("cpp") {
+                        if let Some(n) = p.file_name() {
+                            files.push(format!("src\\{}", n.to_string_lossy()));
+                        }
+                    }
+                }
+            }
+        }
+        if files.is_empty() {
+            return Err(String::from("no .cpp files"));
+        }
+        let file_args = files.join(" ");
         let cmdline = format!(
-            "call \"{}\" && cl.exe /nologo /std:c++17 /EHsc {} main.cpp /Fe:{}",
+            "call \"{}\" && cl.exe /nologo /std:c++17 /EHsc /I include {} /Fo\"build\\obj\\\\\" /Fe\"{}\"",
             vsdevcmd.display(),
-            cpp,
+            file_args,
             exe
         );
         let out = Command::new("cmd.exe")
@@ -99,12 +117,20 @@ pub fn write_build_script(dir: &Path, base: &str) -> Result<(), String> {
         content.push_str("@echo off\n");
         content.push_str("setlocal\n");
         content.push_str(&format!("call \"{}\"\n", vsdevcmd.display()));
-        content.push_str(&format!("cl.exe /nologo /std:c++17 /EHsc {}.cpp main.cpp /Fe:{}.exe\n", base, base));
+        content.push_str(&format!("cl.exe /nologo /std:c++17 /EHsc /I include src\\*.cpp /Fo\"build\\obj\\\\\" /Fe\"build\\bin\\{}.exe\"\n", base));
     } else {
         content.push_str("@echo off\n");
         content.push_str("setlocal\n");
         content.push_str("call VsDevCmd.bat\n");
-        content.push_str(&format!("cl.exe /nologo /std:c++17 /EHsc {}.cpp main.cpp /Fe:{}.exe\n", base, base));
+        content.push_str(&format!("cl.exe /nologo /std:c++17 /EHsc /I include src\\*.cpp /Fo\"build\\obj\\\\\" /Fe\"build\\bin\\{}.exe\"\n", base));
     }
     std::fs::write(script, content).map_err(|e| e.to_string())
+        .and_then(|_| {
+            let sh = dir.join("build.sh");
+            let mut shc = String::new();
+            shc.push_str("#!/usr/bin/env bash\n");
+            shc.push_str("set -e\n");
+            shc.push_str(&format!("g++ -std=c++17 -I include src/*.cpp -o build/bin/{}.exe || clang++ -std=c++17 -I include src/*.cpp -o build/bin/{}.exe\n", base, base));
+            std::fs::write(sh, shc).map_err(|e| e.to_string())
+        })
 }

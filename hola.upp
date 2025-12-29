@@ -1,4 +1,7 @@
-class Hola:
-    nombre: String
-    def saludo(self) -> String:
-        return "Hola " + self.nombre
+Hola
+  name String
+
+  greet -> String
+    "Hola " + name
+
+run Hola
