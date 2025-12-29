@@ -1,104 +1,89 @@
 # Ultra C++
 
-Transpilador en Rust que convierte un lenguaje OOP puro con sintaxis tipo Python (.upp) a C++ moderno (C++17), generando headers (.hpp), sources (.cpp) y un ejecutable de prueba opcional.
+<div align="center">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/c/cc/Escudo_nacional_del_Per%C3%BA.svg" alt="Escudo del Perú" width="100"/>
+  <br>
+  <em>Hacia la democratización del conocimiento tecnológico</em>
+</div>
 
-## Características
-- Sintaxis OOP tipo Python con indentación:
-  - `class Nombre:`
-  - Campos a nivel de clase: `campo: Tipo`
-  - Métodos: `def metodo(self, p: Tipo) -> Ret:`
-  - `return "..." + self.campo`
-- Generación C++:
-  - Clase, constructor con todos los `fields`
-  - Métodos que retornan `String` mapeados a `std::string`
-- Carpeta de salida por archivo:
-  - `dist/<base>/<base>.hpp`, `<base>.cpp`, `main.cpp`, `build.bat`
-- Compilación integrada:
-  - Detecta Visual Studio Build Tools (VsDevCmd.bat) y compila con `cl.exe`
-  - Alternativas: intenta `g++` o `clang++` si están en PATH
- - Métricas opcionales y staging:
-   - `report.json` con conteos y tiempos (`--bench` o `--staging`)
-   - `build.sh` generado para Unix
+---
 
-## Requisitos
-- Rust (cargo)
-- Windows:
-  - Visual Studio Build Tools (C++), o
-  - MinGW-w64 (g++), o
-  - LLVM (clang++)
+## Propósito del Proyecto
 
-## Uso Rápido
-1. Compilar el transpilador:
-   - `cargo build --release`
-2. Crear un archivo `.upp`, por ejemplo `hola.upp`:
-   ```
-   class Hola:
-       nombre: String
-       def saludo(self) -> String:
-           return "Hola " + self.nombre
-   ```
-3. Generar C++:
-   - `./target/release/ultracpp.exe hola.upp`
-   - Salida:
-     - `dist/hola/hola.hpp`
-     - `dist/hola/hola.cpp`
-     - `dist/hola/main.cpp`
-     - `dist/hola/build.bat`
-      - `dist/hola/build.sh`
-4. Compilar C++ (MSVC):
-   - Abrir "Developer Command Prompt for VS" o usar PowerShell
-   - `cd dist/hola`
-   - `.\build.bat`
-   - Ejecutar:
-   - `.\hola.exe`
-5. Métricas de ejecución:
-   - Activar benchmarks: `cargo run -- hola.upp dist --bench`
-   - Ver reporte: `dist/hola/report.json`
+> "Esta iniciativa busca democratizar el acceso a C++ mediante herramientas pedagógicas que combinan rigor técnico con elegancia conceptual. Nuestro objetivo es transformar la complejidad inherente del lenguaje en una experiencia de aprendizaje fluida y accesible."
 
-## CLI
-- `ultracpp <input.upp> [outdir]`
-  - Si no se especifica `outdir`, se usa `dist/`
-  - Se crea una carpeta `dist/<base>/` por cada `.upp`
- - Flags:
-   - `--compile` intenta compilar y ejecutar el binario generado
-   - `--no-main` evita generar `main.cpp`
-   - `--compiler cl|g++|clang++` fuerza compilador específico
-   - `--std c++17|c++20` selecciona estándar C++
-   - `--bench` escribe `report.json` con tiempos y conteos
-   - `--staging` usa `staging/<base>/` y escribe `report.json`
+Ultra C++ nace como una respuesta a la barrera de entrada que a menudo representa C++ moderno. Al fusionar la sintaxis intuitiva de lenguajes de alto nivel con la potencia del metal desnudo de C++, facilitamos un viaje educativo desde la abstracción hasta la implementación concreta.
 
-## Ejemplo
-- Entrada: `hola.upp`
-  - [hola.upp](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/hola.upp)
-- Generado:
-  - Header: [dist/hola/hola.hpp](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/dist/hola/hola.hpp)
-  - Source: [dist/hola/hola.cpp](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/dist/hola/hola.cpp)
+## Introducción
 
-## Desarrollo
-- Código principal:
-  - Parser: [src/parser.rs](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/src/parser.rs)
-  - Generador C++: [src/codegen.rs](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/src/codegen.rs)
-  - CLI: [src/main.rs](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/src/main.rs)
-  - Detector MSVC: [src/tool_detector.rs](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/src/tool_detector.rs)
- - API de librería:
-   - Includes automáticos: [resolve_includes](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/src/lib.rs#L58-L100)
-- Pruebas:
-  - [tests/transpile.rs](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/tests/transpile.rs)
+Ultra C++ es un transpilador vanguardista escrito en Rust, diseñado para convertir código con sintaxis orientada a objetos pura (similar a Python) en C++ moderno (C++17). No solo genera código; educa. Cada línea transpilada es un ejemplo de cómo se estructuran aplicaciones robustas, generando automáticamente archivos de cabecera (`.hpp`), fuentes (`.cpp`) y scripts de construcción multiplataforma.
 
-## Roadmap
-- Ver el plan completo en [ROADMAP.md](file:///c:/Users/andre/OneDrive/Documentos/Ultra%20C++/ROADMAP.md)
+## Instalación Detallada
 
-## Subir a GitHub
-1. Inicializar git:
-   - `git init`
-2. Revisar estado:
-   - `git status`
-3. Añadir archivos:
-   - `git add .`
-4. Crear commit (opcional aquí, o hazlo luego):
-   - `git commit -m "Ultra C++: transpilador base"`
-5. Crear repositorio en GitHub e incluir remoto:
-   - `git remote add origin https://github.com/<tu-usuario>/<tu-repo>.git`
-6. Subir:
-   - `git push -u origin main`
+Para integrar Ultra C++ en su flujo de trabajo, asegúrese de contar con un entorno preparado para la excelencia.
 
+### Prerrequisitos
+*   **Rust (Cargo)**: El corazón de nuestro transpilador. Asegúrese de tener la última versión estable.
+*   **Compilador de C++**:
+    *   *Windows*: Visual Studio Build Tools (recomendado para integración nativa) o MinGW-w64.
+    *   *Linux/macOS*: GCC (`g++`) o LLVM (`clang++`).
+
+### Proceso de Compilación
+1.  Clone este repositorio o descargue el código fuente.
+2.  Abra su terminal en la raíz del proyecto.
+3.  Ejecute el comando de construcción optimizada:
+    ```bash
+    cargo build --release
+    ```
+4.  El ejecutable `ultracpp` estará disponible en `target/release/`.
+
+## Ejemplos Paradigmáticos
+
+A continuación, presentamos cómo Ultra C++ transforma conceptos abstractos en realidades tangibles.
+
+### 1. El Saludo Clásico (Hola Mundo Orientado a Objetos)
+Un ejemplo minimalista que ilustra la definición de clases, tipado fuerte y métodos.
+
+**Archivo: `hola.upp`**
+```python
+class Hola:
+    nombre: String
+
+    def saludo(self) -> String:
+        return "Saludos cordiales, " + self.nombre
+```
+
+**Generación:**
+Ejecute el transpilador para observar la magia:
+```bash
+ultracpp hola.upp
+```
+Esto orquestará una estructura completa en `dist/hola/`, separando limpiamente la declaración (`hola.hpp`) de la implementación (`hola.cpp`).
+
+## Buenas Prácticas Estilizadas
+
+Para mantener la armonía entre el código fuente y el código generado, recomendamos:
+
+*   **Tipado Explícito**: Ultra C++ valora la claridad. Declare siempre los tipos de sus campos y retornos (ej. `String`, `Int`, `Void`).
+*   **Nomenclatura PascalCase**: Para las clases (ej. `GestorDeJuego`), evocando estructura y solidez.
+*   **Indentación Consistente**: La estructura visual define la estructura lógica. Mantenga una indentación pulcra (4 espacios).
+*   **Modularidad**: Divida su lógica en múltiples clases y archivos para facilitar la mantenibilidad y el estudio de componentes aislados.
+
+## Roadmap de Desarrollo
+
+Nuestro viaje hacia la excelencia continúa. Consulte [ROADMAP.md](ROADMAP.md) para una visión detallada. Hitos clave incluyen:
+*   Soporte avanzado para plantillas (Templates).
+*   Gestión de memoria inteligente y transparente.
+*   Integración con bibliotecas gráficas para desarrollo lúdico.
+
+---
+
+## Licencia
+
+**Copyright (c) 2025 Eddi André Salazar Matos - Perú**
+
+Se concede permiso, de forma gratuita, a cualquier persona que obtenga una copia de este software y de los archivos de documentación asociados (el "Software"), para tratar con el Software sin restricciones, incluyendo, sin limitación, los derechos de uso, copia, modificación, fusión, publicación, distribución, sublicencia y/o venta de copias del Software, y para permitir a las personas a las que se les proporcione el Software a hacerlo, sujeto a las siguientes condiciones:
+
+El aviso de copyright anterior y este aviso de permiso se incluirán en todas las copias o partes sustanciales del Software.
+
+EL SOFTWARE SE PROPORCIONA "TAL CUAL", SIN GARANTÍA DE NINGÚN TIPO, EXPRESA O IMPLÍCITA, INCLUYENDO PERO NO LIMITADO A LAS GARANTÍAS DE COMERCIABILIDAD, IDONEIDAD PARA UN PROPÓSITO PARTICULAR Y NO INFRACCIÓN. EN NINGÚN CASO LOS AUTORES O TITULARES DEL COPYRIGHT SERÁN RESPONSABLES DE NINGUNA RECLAMACIÓN, DAÑO U OTRA RESPONSABILIDAD, YA SEA EN UNA ACCIÓN DE CONTRATO, AGRAVIO O DE OTRO TIPO, QUE SURJA DE, FUERA DE O EN CONEXIÓN CON EL SOFTWARE O EL USO U OTRAS TRATOS EN EL SOFTWARE.
