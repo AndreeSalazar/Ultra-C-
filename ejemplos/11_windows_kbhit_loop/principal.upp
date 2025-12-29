@@ -1,0 +1,15 @@
+std
+entry Principal
+class Principal:
+  run():
+    print("Press a key to exit")
+    while true:
+      native """
+      if (_kbhit()) {
+        _getch();
+        break;
+      }
+      Sleep(120);
+      """
+    print("Bye")
+

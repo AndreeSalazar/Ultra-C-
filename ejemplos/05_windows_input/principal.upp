@@ -1,0 +1,7 @@
+std
+entry Principal
+class Principal:
+  run():
+    print("Press any key to continue")
+    native "_getch();"
+

@@ -1,0 +1,8 @@
+std
+import util.upp@1.0.0
+entry Principal
+class Principal:
+  run():
+    print("Usando Utils.Version")
+    Utils.Version.current()
+

@@ -1,31 +1,402 @@
-namespace Juego // Namespace: Agrupa tus clases para evitar conflictos de nombres (como una "carpeta" para tu código)
+namespace Juego
 std
 import hola.upp
 import util.upp@1.0.0
 
+class EventBus:
+  audio_cat: Map<String, String>
+  audio_prio: Map<String, Int>
+  def subscribe(self, event: String, name: String) -> Void:
+    print("Event: " + event + " payload=" + name)
+  def set_audio(self, event: String, cat: String, prio: Int) -> Void:
+    native "audio_cat[event] = cat; audio_prio[event] = prio;"
+  def emit(self, event: String, payload: String) -> Void:
+    native """
+    std::string cat = "events";
+    int pr = 5;
+    auto itc = audio_cat.find(event);
+    if (itc != audio_cat.end()) { cat = itc->second; }
+    auto itp = audio_prio.find(event);
+    if (itp != audio_prio.end()) { pr = itp->second; }
+    Sound::play(cat, pr, payload);
+    """
+
+class Rect:
+  x: Float
+  y: Float
+  w: Float
+  h: Float
+  def collides(self, other: Rect) -> Bool:
+    native """
+    return (x < other.x + other.w) && (x + w > other.x) && (y < other.y + other.h) && (y + h > other.y);
+    """
+
+class Sound:
+  def play(category: String, priority: Int, message: String) -> Void:
+    native "std::cout << \"[SND][\" << category << \"][prio=\" << priority << \"] \" << message << std::endl;"
+
+class ResourceManager:
+  resources: Map<String, String>
+  refs: Map<String, Int>
+  def load(self, name: String, content: String) -> Void:
+    native """
+    if (refs.find(name) == refs.end()) { refs[name] = 1; resources[name] = content; }
+    else { refs[name] += 1; }
+    """
+  def get(self, name: String) -> String:
+    native """
+    auto it = resources.find(name);
+    if (it != resources.end()) { return it->second; }
+    return std::string("");
+    """
+  def release(self, name: String) -> Void:
+    native """
+    auto it = refs.find(name);
+    if (it != refs.end()) {
+      if (--(it->second) <= 0) { refs.erase(it); resources.erase(name); }
+    }
+    """
+
+class Config:
+  width: Int
+  height: Int
+  start_x: Int
+  start_y: Int
+  obstacles: Vector<Rect>
+  profile: String
+  sprite_player: String
+  sprite_obstacle: String
+  audio_map: String
+  lang: String
+  def add_obstacle(self, x: Int, y: Int) -> Void:
+    native "Rect r; r.x = (float)x; r.y = (float)y; r.w = 1.0f; r.h = 1.0f; obstacles.push_back(r);"
+  def set_size(self, w: Int, h: Int) -> Void:
+    native "width = w; height = h;"
+  def set_start(self, x: Int, y: Int) -> Void:
+    native "start_x = x; start_y = y;"
+  def load(path: String) -> Config:
+    native """
+    Config cfg;
+    cfg.width = 40; cfg.height = 12; cfg.start_x = 2; cfg.start_y = 2; cfg.profile = std::string(""); cfg.sprite_player = std::string(""); cfg.sprite_obstacle = std::string(""); cfg.audio_map = std::string(""); cfg.lang = std::string("es");
+    std::ifstream f(path);
+    if (f) {
+      auto trim = [](std::string s)->std::string {
+        size_t a=0,b=s.size();
+        while (a<b && (s[a]==' '||s[a]=='\t')) a++;
+        while (b>a && (s[b-1]==' '||s[b-1]=='\t'||s[b-1]=='\r'||s[b-1]=='\n')) b--;
+        return s.substr(a,b-a);
+      };
+      std::string line;
+      while (std::getline(f, line)) {
+        auto hash = line.find('#'); if (hash != std::string::npos) line = line.substr(0, hash);
+        line = trim(line);
+        if (line.empty()) continue;
+        if (line.find("width") == 0) {
+          auto eq = line.find('='); if (eq!=std::string::npos) { cfg.width = std::stoi(trim(line.substr(eq+1))); }
+        } else if (line.find("height") == 0) {
+          auto eq = line.find('='); if (eq!=std::string::npos) { cfg.height = std::stoi(trim(line.substr(eq+1))); }
+        } else if (line.find("player_x") == 0) {
+          auto eq = line.find('='); if (eq!=std::string::npos) { cfg.start_x = std::stoi(trim(line.substr(eq+1))); }
+        } else if (line.find("player_y") == 0) {
+          auto eq = line.find('='); if (eq!=std::string::npos) { cfg.start_y = std::stoi(trim(line.substr(eq+1))); }
+        } else if (line.find("sprite_player") == 0) {
+          auto eq = line.find('='); if (eq!=std::string::npos) { cfg.sprite_player = trim(line.substr(eq+1)); }
+        } else if (line.find("sprite_obstacle") == 0) {
+          auto eq = line.find('='); if (eq!=std::string::npos) { cfg.sprite_obstacle = trim(line.substr(eq+1)); }
+        } else if (line.find("profile") == 0) {
+          auto eq = line.find('='); if (eq!=std::string::npos) { cfg.profile = trim(line.substr(eq+1)); }
+        } else if (line.find("audio_map") == 0) {
+          auto eq = line.find('='); if (eq!=std::string::npos) { cfg.audio_map = trim(line.substr(eq+1)); }
+        } else if (line.find("lang") == 0) {
+          auto eq = line.find('='); if (eq!=std::string::npos) { cfg.lang = trim(line.substr(eq+1)); }
+        } else if (line.find("obstacles") == 0) {
+          auto eq = line.find('='); if (eq!=std::string::npos) {
+            auto s = line.substr(eq+1);
+            std::vector<int> nums; nums.reserve(64);
+            std::string cur;
+            for (char ch : s) {
+              if ((ch>='0'&&ch<='9') || ch=='-') { cur.push_back(ch); }
+              else { if (!cur.empty()) { nums.push_back(std::stoi(cur)); cur.clear(); } }
+            }
+            if (!cur.empty()) { nums.push_back(std::stoi(cur)); cur.clear(); }
+            for (size_t i=0; i+1<nums.size(); i+=2) {
+              Rect r; r.x = (float)nums[i]; r.y = (float)nums[i+1]; r.w=1.0f; r.h=1.0f; cfg.obstacles.push_back(r);
+            }
+          }
+        }
+      }
+    }
+    if (cfg.width <= 0 || cfg.height <= 0) { cfg.width = 40; cfg.height = 12; Sound::play(std::string("config"), 1, std::string("invalid width/height; defaults applied")); }
+    if (!cfg.profile.empty()) {
+      std::string pfile = std::string("config.") + cfg.profile + std::string(".toml");
+      std::ifstream pf(pfile);
+      if (pf) {
+        auto trim = [](std::string s)->std::string {
+          size_t a=0,b=s.size();
+          while (a<b && (s[a]==' '||s[a]=='\t')) a++;
+          while (b>a && (s[b-1]==' '||s[b-1]=='\t'||s[b-1]=='\r'||s[b-1]=='\n')) b--;
+          return s.substr(a,b-a);
+        };
+        std::string line;
+        while (std::getline(pf, line)) {
+          auto hash = line.find('#'); if (hash != std::string::npos) line = line.substr(0, hash);
+          line = trim(line);
+          if (line.empty()) continue;
+          if (line.find("width") == 0) { auto eq = line.find('='); if (eq!=std::string::npos) { cfg.width = std::stoi(trim(line.substr(eq+1))); } }
+          else if (line.find("height") == 0) { auto eq = line.find('='); if (eq!=std::string::npos) { cfg.height = std::stoi(trim(line.substr(eq+1))); } }
+          else if (line.find("player_x") == 0) { auto eq = line.find('='); if (eq!=std::string::npos) { cfg.start_x = std::stoi(trim(line.substr(eq+1))); } }
+          else if (line.find("player_y") == 0) { auto eq = line.find('='); if (eq!=std::string::npos) { cfg.start_y = std::stoi(trim(line.substr(eq+1))); } }
+          else if (line.find("sprite_player") == 0) { auto eq = line.find('='); if (eq!=std::string::npos) { cfg.sprite_player = trim(line.substr(eq+1)); } }
+          else if (line.find("sprite_obstacle") == 0) { auto eq = line.find('='); if (eq!=std::string::npos) { cfg.sprite_obstacle = trim(line.substr(eq+1)); } }
+          else if (line.find("audio_map") == 0) { auto eq = line.find('='); if (eq!=std::string::npos) { cfg.audio_map = trim(line.substr(eq+1)); } }
+          else if (line.find("lang") == 0) { auto eq = line.find('='); if (eq!=std::string::npos) { cfg.lang = trim(line.substr(eq+1)); } }
+          else if (line.find("obstacles") == 0) {
+            auto eq = line.find('='); if (eq!=std::string::npos) {
+              auto s = line.substr(eq+1);
+              std::vector<int> nums; nums.reserve(64);
+              std::string cur;
+              for (char ch : s) {
+                if ((ch>='0'&&ch<='9') || ch=='-') { cur.push_back(ch); }
+                else { if (!cur.empty()) { nums.push_back(std::stoi(cur)); cur.clear(); } }
+              }
+              if (!cur.empty()) { nums.push_back(std::stoi(cur)); cur.clear(); }
+              cfg.obstacles.clear();
+              for (size_t i=0; i+1<nums.size(); i+=2) {
+                Rect r; r.x = (float)nums[i]; r.y = (float)nums[i+1]; r.w=1.0f; r.h=1.0f; cfg.obstacles.push_back(r);
+              }
+            }
+          }
+        }
+      }
+    }
+    return cfg;
+    """
+
+class ConfigSchema:
+  def validate(self, cfg: Config) -> Bool:
+    native """
+    if (cfg.width < 10 || cfg.width > 100) { std::cerr << "config width out of range" << std::endl; return false; }
+    if (cfg.height < 5 || cfg.height > 60) { std::cerr << "config height out of range" << std::endl; return false; }
+    if (cfg.start_x < 0 || cfg.start_x >= cfg.width || cfg.start_y < 0 || cfg.start_y >= cfg.height) { std::cerr << "player start out of bounds" << std::endl; return false; }
+    return true;
+    """
+
+class Strings:
+  table: Map<String, String>
+  def load(self, lang: String) -> Void:
+    native """
+    table.clear();
+    std::string fname = std::string("strings_") + lang + std::string(".txt");
+    std::ifstream f(fname);
+    auto trim = [](std::string s)->std::string {
+      size_t a=0,b=s.size();
+      while (a<b && (s[a]==' '||s[a]=='\t')) a++;
+      while (b>a && (s[b-1]==' '||s[b-1]=='\t'||s[b-1]=='\r'||s[b-1]=='\n')) b--;
+      return s.substr(a,b-a);
+    };
+    if (f) {
+      std::string line;
+      while (std::getline(f, line)) {
+        auto hash = line.find('#'); if (hash != std::string::npos) line = line.substr(0, hash);
+        auto eq = line.find('='); 
+        if (eq != std::string::npos) {
+          std::string k = trim(line.substr(0, eq));
+          std::string v = trim(line.substr(eq+1));
+          if (!k.empty()) table[k] = v;
+        }
+      }
+    }
+    if (table.find("version_label") == table.end()) table["version_label"] = "Versión actual:";
+    if (table.find("start_label") == table.end()) table["start_label"] = "--- Start ---";
+    if (table.find("end_label") == table.end()) table["end_label"] = "--- Fin Ejecución ---";
+    """
+  def get(self, key: String) -> String:
+    native """
+    auto it = table.find(key);
+    if (it != table.end()) return it->second;
+    return key;
+    """
+
+class Entity:
+  x: Float
+  y: Float
+  move(dx: Float, dy: Float):
+    native "x += dx; y += dy;"
+
+class Player(Entity):
+  name: String
+  render():
+    print("Player: " + name)
+  def get_rect(self) -> Rect:
+    native """
+    Rect r; r.x = x; r.y = y; r.w = 1.0f; r.h = 1.0f; return r;
+    """
+
 class Principal:
-  // hola.upp() se convierte internamente en hola_upp()
-  // Es el punto de entrada que definiste en ideas_sintaxis.md
+  running: Bool
+  score: Int
+  level: Int
+  paused: Bool
+  target_fps: Int
+  width: Int
+  height: Int
+  high_score: Int
+  profile: String
+  player: Player
+  obstacles: Vector<Rect>
+  bus: EventBus
+  rm: ResourceManager
+  ascii_player: String
+  ascii_obstacle: String
+  strings: Strings
+  def update(self, dt: Float) -> Void:
+    if paused:
+      return
+    native """
+    (void)dt;
+    #ifdef _WIN32
+    if (_kbhit()) {
+      int c = _getch();
+      if (c == 'w') { this->player.move(0.0f, -0.2f); }
+      else if (c == 's') { this->player.move(0.0f, 0.2f); }
+      else if (c == 'a') { this->player.move(-0.2f, 0.0f); }
+      else if (c == 'd') { this->player.move(0.2f, 0.0f); }
+      else if (c == 'p') { this->paused = !this->paused; }
+    }
+    #endif
+    Rect pr = this->player.get_rect();
+    for (auto &o : this->obstacles) {
+      if (pr.collides(o)) {
+        this->score += 1;
+        if (this->score > this->high_score) { this->high_score = this->score; }
+        this->bus.emit(std::string("collision"), std::string("player"));
+        break;
+      }
+    }
+    """
+  def draw(self) -> Void:
+    native """
+    int w = width, h = height;
+    if (w <= 0) w = 40;
+    if (h <= 0) h = 12;
+    std::vector<std::string> rows; rows.assign(h, std::string(w, '.'));
+    for (auto &o : obstacles) {
+      int ox = (int)o.x, oy = (int)o.y;
+      if (ox>=0 && ox<w && oy>=0 && oy<h) rows[oy][ox] = ascii_obstacle.empty()? 'O' : ascii_obstacle[0];
+    }
+    int px = (int)player.x, py = (int)player.y;
+    if (px>=0 && px<w && py>=0 && py<h) rows[py][px] = ascii_player.empty()? 'P' : ascii_player[0];
+    std::string block;
+    block.reserve(h*(w+1)+64);
+    for (int y=0; y<h; ++y) { block += rows[y]; block.push_back('\n'); }
+    block += std::string("Score ") + std::to_string(score) + std::string(" Level ") + std::to_string(level) + std::string(" High ") + std::to_string(high_score) + std::string("\n");
+    std::cout << block;
+    """
+  def run_loop(self) -> Void:
+    native """
+    static std::time_t last_m = 0;
+    for (int i = 0; i < 300; ++i) {
+      float dt = 1.0f / this->target_fps;
+      this->update(dt);
+      {
+        std::error_code ec;
+        auto p = std::filesystem::path("config.toml");
+        if (std::filesystem::exists(p, ec)) {
+          auto ft = std::filesystem::last_write_time(p, ec);
+          auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+            ft - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now()
+          );
+          std::time_t mt = std::chrono::system_clock::to_time_t(sctp);
+          if (mt > last_m) {
+            last_m = mt;
+            Config cfg2 = Config::load(std::string("config.toml"));
+            width = cfg2.width; height = cfg2.height; player.x = (float)cfg2.start_x; player.y = (float)cfg2.start_y; obstacles = cfg2.obstacles;
+            ConfigSchema sch;
+            if (!sch.validate(cfg2)) { Sound::play(std::string("config"), 1, std::string("invalid reload; defaults")); width = 40; height = 12; player.x = 2.0f; player.y = 2.0f; }
+            if (!cfg2.sprite_player.empty()) ascii_player = cfg2.sprite_player;
+            if (!cfg2.sprite_obstacle.empty()) ascii_obstacle = cfg2.sprite_obstacle;
+            if (!cfg2.audio_map.empty()) {
+              std::string s = cfg2.audio_map;
+              std::string cur;
+              for (size_t k=0;k<=s.size();++k) {
+                char ch = (k<s.size()? s[k] : ';');
+                if (ch!=';') cur.push_back(ch);
+                else {
+                  if (!cur.empty()) {
+                    std::vector<std::string> parts;
+                    std::string tmp;
+                    for (size_t m=0;m<=cur.size();++m) {
+                      char c = (m<cur.size()? cur[m] : ':');
+                      if (c!=':') tmp.push_back(c); else { parts.push_back(tmp); tmp.clear(); }
+                    }
+                    if (parts.size()>=2) {
+                      std::string ev = parts[0];
+                      std::string cat = parts[1];
+                      int pr = (parts.size()>=3)? std::stoi(parts[2]) : 5;
+                      bus.set_audio(ev, cat, pr);
+                    }
+                  }
+                  cur.clear();
+                }
+              }
+            }
+            Sound::play(std::string("config"), 2, std::string("reload"));
+          }
+        }
+      }
+      this->draw();
+      #ifdef _WIN32
+        Sleep(1000 / this->target_fps);
+      #else
+        // sin chrono: no-op o sleep simple según plataforma
+      #endif
+    }
+    """
+
   hola.upp():
-    print("Versión actual: " + Utils.Version.current())
+    native "std::cout << strings.get(std::string(\"version_label\")) << \" \" << Utils::Version::current() << std::endl;"
     
-    // Inicialización simplificada (Type Inference)
     h := Hola("como están")
     
     print(h.greet())
 
+  start():
+    native "std::cout << strings.get(std::string(\"start_label\")) << std::endl;"
+    native "running = true; score = 0; level = 1; paused = false; target_fps = 60;"
+    native "player.name = std::string(\"Eddi\");"
+    cfg := Config.load("config.toml")
+    native "width = cfg.width; height = cfg.height; player.x = (float)cfg.start_x; player.y = (float)cfg.start_y; this->obstacles = cfg.obstacles; profile = cfg.profile;"
+    sch := ConfigSchema()
+    native "if (!sch.validate(cfg)) { Sound::play(std::string(\"config\"), 1, std::string(\"invalid; defaults\")); width = 40; height = 12; player.x = 2.0f; player.y = 2.0f; }"
+    rm.load("player", "P")
+    rm.load("obstacle", "O")
+    native "ascii_player = rm.get(std::string(\"player\")); if (!cfg.sprite_player.empty()) ascii_player = cfg.sprite_player;"
+    native "ascii_obstacle = rm.get(std::string(\"obstacle\")); if (!cfg.sprite_obstacle.empty()) ascii_obstacle = cfg.sprite_obstacle;"
+    native "strings.load(cfg.lang);"
+    native "if (!cfg.audio_map.empty()) { std::string s = cfg.audio_map; std::string cur; for (size_t k=0;k<=s.size();++k) { char ch = (k<s.size()? s[k] : ';'); if (ch!=';') cur.push_back(ch); else { if (!cur.empty()) { std::vector<std::string> parts; std::string tmp; for (size_t m=0;m<=cur.size();++m) { char c = (m<cur.size()? cur[m] : ':'); if (c!=':') tmp.push_back(c); else { parts.push_back(tmp); tmp.clear(); } } if (parts.size()>=2) { std::string ev = parts[0]; std::string cat = parts[1]; int pr = (parts.size()>=3)? std::stoi(parts[2]) : 5; bus.set_audio(ev, cat, pr); } } cur.clear(); } } }"
+    native "Sound::play(std::string(\"system\"), 1, std::string(\"start\")); bus.emit(std::string(\"start\"), std::string(\"\"));"
+    native """
+    Rect o; o.x = 1.0f; o.y = 1.0f; o.w = 1.0f; o.h = 1.0f;
+    this->obstacles.push_back(o);
+    """
+    native "high_score = 0; { std::ifstream hs(\"highscore.txt\"); if (hs) { int v=0; hs>>v; if (v>0) high_score = v; } }"
+    call hola.upp
+    player.render()
+
+  loop():
+    print("--- Loop Tick ---")
+    native "score += 1;"
+    native "level += (score % 3 == 0) ? 1 : 0;"
+    e := Entity()
+    native "e.move(0.5f, 0.25f);"
+    call hola.upp
+
   run():
-    print("--- Iniciando Ejecución ---")
-    // Usamos 'call' para invocar el método hola.upp() de forma explicita y limpia
-    call hola.upp
-    call hola.upp
-    call hola.upp
-    call hola.upp
-    call hola.upp
-    call hola.upp
-    call hola.upp
-    call hola.upp
-    call hola.upp
-    print("--- Fin Ejecución ---")
+    native "std::cout << strings.get(std::string(\"start_label\")) << std::endl;"
+    start()
+    run_loop()
+    native "rm.release(std::string(\"player\")); rm.release(std::string(\"obstacle\"));"
+    native "{ std::ofstream hs(\"highscore.txt\"); hs << high_score; }"
+    native "std::cout << strings.get(std::string(\"end_label\")) << std::endl;"
 
 entry Principal

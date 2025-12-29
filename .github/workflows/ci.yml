@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build and Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            compiler_cxx: g++
+          - os: windows-latest
+            compiler_cxx: cl
+          - os: macos-latest
+            compiler_cxx: clang++
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+
+    - name: Set up MSVC (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Build
+      run: cargo build --verbose
+
+    - name: Run tests
+      run: cargo test --verbose
+
+    - name: Lint (Rust)
+      run: cargo clippy -- -D warnings
+
+    - name: Format Check (Rust)
+      run: cargo fmt -- --check
+
+    # Smoke Tests - Run the game demo compilation in different modes
+    # We use 'combine' directory as the test subject
+    
+    - name: Smoke Test - Classic Mode
+      shell: bash
+      run: |
+        cargo run -- combine dist_classic --emit classic --compile --compiler ${{ matrix.compiler_cxx }}
+
+    - name: Smoke Test - Unity Mode
+      shell: bash
+      run: |
+        cargo run -- combine dist_unity --emit unity --compile --compiler ${{ matrix.compiler_cxx }}
+
+    - name: Smoke Test - Hybrid Mode
+      shell: bash
+      run: |
+        cargo run -- combine dist_hybrid --emit hybrid --compile --compiler ${{ matrix.compiler_cxx }}
+
+    # Extra checks for Linux (Clang)
+    - name: Smoke Test - Clang (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: cargo run -- combine dist_clang --emit classic --compile --compiler clang++

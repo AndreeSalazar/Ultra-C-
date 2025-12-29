@@ -1,5 +1,5 @@
-pub mod parser;
 pub mod codegen;
+pub mod parser;
 pub mod tool_detector;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,15 +30,35 @@ pub enum Expr {
     UnaryOp(String, Box<Expr>),
     SelfField(String),
     Variable(String),
-    SelfCall { name: String, args: Vec<Expr> },
-    SuperCall { name: String, args: Vec<Expr> },
-    FunctionCall { name: String, args: Vec<Expr> },
+    SelfCall {
+        name: String,
+        args: Vec<Expr>,
+    },
+    SuperCall {
+        name: String,
+        args: Vec<Expr>,
+    },
+    FunctionCall {
+        name: String,
+        args: Vec<Expr>,
+    },
     BinaryOp(Box<Expr>, String, Box<Expr>),
     Block(Vec<Expr>),
-    If { cond: Box<Expr>, then_body: Box<Expr>, else_body: Option<Box<Expr>> },
-    While { cond: Box<Expr>, body: Box<Expr> },
+    If {
+        cond: Box<Expr>,
+        then_body: Box<Expr>,
+        else_body: Option<Box<Expr>>,
+    },
+    While {
+        cond: Box<Expr>,
+        body: Box<Expr>,
+    },
     Return(Option<Box<Expr>>),
-    VarDecl { name: String, ty: String, value: Option<Box<Expr>> },
+    VarDecl {
+        name: String,
+        ty: String,
+        value: Option<Box<Expr>>,
+    },
     Concat(Box<Expr>, Box<Expr>),
     Native(String),
     FileCall(String),

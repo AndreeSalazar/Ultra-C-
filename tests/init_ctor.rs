@@ -1,4 +1,4 @@
-use ultracpp::{parser, codegen};
+use ultracpp::{codegen, parser};
 
 #[test]
 fn init_constructor_params() {
@@ -17,4 +17,3 @@ class Persona:
     assert!(s.contains("Persona::Persona(std::string nombre)"));
     assert!(s.contains("nombre(nombre)"));
 }
-

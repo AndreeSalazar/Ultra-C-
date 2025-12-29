@@ -1,0 +1,4 @@
+class Child : Base:
+  go():
+    print("Child::go")
+    Base.say()

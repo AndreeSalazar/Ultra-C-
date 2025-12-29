@@ -1,0 +1,10 @@
+std
+import hola.upp
+entry Principal
+class Principal:
+  hola.upp():
+    print("Hola desde principal")
+    h := Hola()
+    h.greet()
+  run():
+    call hola.upp

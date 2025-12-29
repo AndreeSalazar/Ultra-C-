@@ -1,0 +1,12 @@
+class Rect {
+    x: Float
+    y: Float
+}
+
+class Player {
+    def check(r: Rect) {
+    }
+    
+    def list(items: Vector<Rect>) {
+    }
+}

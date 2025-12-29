@@ -1,0 +1,4 @@
+namespace Utils
+class Version:
+  current():
+    print("1.0.0")

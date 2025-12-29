@@ -1,0 +1,9 @@
+std
+import base.upp
+import child.upp
+entry Principal
+class Principal:
+  run():
+    c := Child()
+    c.go()
+

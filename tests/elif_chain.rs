@@ -1,8 +1,9 @@
-use ultracpp::{parser, codegen};
+use ultracpp::{codegen, parser};
 
 #[test]
 fn elif_chain_emits_nested_if_else() {
-    let c = parser::parse(r#"
+    let c = parser::parse(
+        r#"
 class Elifs:
   def f(self) -> String:
     if  x == 1:
@@ -11,9 +12,9 @@ class Elifs:
       return "B"
     else:
       return "C"
-"#);
+"#,
+    );
     let s = codegen::source(&c);
     assert!(s.contains("if ("));
     assert!(s.contains("else {"));
 }
-

@@ -8,7 +8,7 @@
 
 ## Purpose
 
-Ultra C++ is a didactic, transpiled language that maps a clean, Python‑inspired syntax to modern, optimized C++17. It helps learners and professionals focus on algorithms and architecture while retaining full control over native C++ when needed.
+Ultra C++ is a didactic, transpiled language that maps a clean, Python‑inspired syntax to modern C++17. It lets you focus on algorithms and architecture while keeping full, explicit C++ when needed. The generated C++ is readable and “enterprise‑friendly”: clear namespaces, explicit main, and optional unity builds.
 
 ## Installation
 
@@ -28,34 +28,40 @@ The binary will be at `target/release/ultracpp`.
 ## Workflow
 
 1. Write `.upp` files (Ultra syntax)
-2. Transpile to C++ (`.hpp` + `.cpp`)
-3. Compile and run
+2. Transpile to C++ (classic: `.hpp` + `.cpp`, or unity: `all.cpp`)
+3. Compile and run (MSVC / g++ / clang++)
 
-### Minimal Example
+### Minimal Example (Ultra syntax)
 
 ```python
 entry Main
 
 class Main:
-  def run():
-    native "std::cout << \"Hello from Ultra C++!\" << std::endl;"
+  run():
+    print("Hello from Ultra C++!")
 ```
 
-Transpile and compile:
+Transpile and compile (Windows):
 
 ```bash
-ultracpp hello_world.upp dist
+.\ultra.bat hello_world.upp
 ```
 
-Project layout:
-- `dist/include/`: generated `.hpp`
-- `dist/src/`: generated `.cpp`
-- `dist/build/bin`: final executable
+Transpile and compile (Linux/macOS):
+
+```bash
+ultracpp hello_world.upp dist --compile
+```
+
+Project layout (classic):
+- `dist/<project>/include/`: generated `.hpp`
+- `dist/<project>/src/`: generated `.cpp` + `entry.cpp`
+- `dist/<project>/build/bin`: final executable
 
 ## Features & Syntax
 
 - Variables:
-  - `let a: Int = 1`
+  - `a: Int = 1`
   - `b: Float`
   - `c: String = "text"`
 - Readable operators:
@@ -65,57 +71,70 @@ Project layout:
 - Native code:
   - `native """ ... """` for multi‑line C++
 - Inheritance:
-  - `class Child(Base):` or `class Child : Base:` (both supported)
-- Self/Super calls:
-  - `self.m()` → `this->m()`
+  - `class Child(Base):` and `class Child : Base:` (both supported)
+- Implicit self:
+  - Instance calls don’t require `self`; Ultra generates idiomatic C++ (`m()`, no `this->` unless needed)
+- Super calls:
   - `super().m()` → `Base::m()`
-- Dotted static:
-  - `Version.version()` → `Version::version()`
+- Dotted statics and namespaces:
+  - `Utils.Version.current()` → `Utils::Version::current()`
 - Conditional Windows headers:
   - `conio.h` / `windows.h` are included only if native blocks use `_kbhit`, `_getch` or `Sleep`
 - Auto‑includes:
-  - Headers inferred from types in fields, params, and local declarations
+  - Headers inferred from fields, params, local declarations, class references and static calls (e.g., `Utils::Version::...`)
+- Printing:
+  - `print(...)` → `std::cout << ... << std::endl`
 
 ## Multi‑File Combine
 
-Ultra C++ can merge multiple `.upp` files in a folder, prioritizing `main.upp` for conflicts. Run:
+Ultra C++ can merge multiple `.upp` files in a folder, prioritizing `principal.upp` as the entry if present. Run:
 
 ```bash
 ultracpp combine dist
+# Windows convenience:
+.\ultra.bat combine
+# Watch changes in a folder (auto‑rebuild on .upp changes):
+ultracpp combine dist --watch
 ```
 
-Example `combine/main.upp`:
+Example `combine/principal.upp`:
 
 ```python
-profile std
-profile math
-capability io
-entry Main
+std
+entry Principal
 import hola.upp
 
-class Main:
-  def run():
-    let msg: String = "Bundle OK"
-    native "std::cout << msg << std::endl;"
+class Principal:
+  hola.upp():
+    print("Version: " + Utils.Version.current())
+    h := Hola("world")
+    print(h.greet())
+
+  run():
+    print("--- Start ---")
+    call hola.upp
+    print("--- End ---")
 ```
 
-## Quick Filecall
+## Filecall (`call`)
 
-For rapid validation, you can call a `.upp` file directly:
+For explicit, readable dispatch you can call a local method mapped from a file name:
 
 ```python
-class Main:
-  def run():
-    hola.upp()
+class Principal:
+  hola.upp():
+    print("Hello")
+  run():
+    call hola.upp
 ```
 
 Transpiles to:
 
 ```cpp
-std::cout << "Hola mundo" << std::endl;
+Principal::hola_upp();
 ```
 
-Other file names produce:
+Fallback (when no matching method is found):
 
 ```cpp
 std::cout << "Run <name>.upp" << std::endl;
@@ -123,21 +142,57 @@ std::cout << "Run <name>.upp" << std::endl;
 
 ## Entry Generation
 
-When `entry Main` or `run Main` is present, an `entry.cpp` is generated that calls `Main::run()` or similar entry points (`run_loop`, `start`, `main`, `run`).
+When `entry Main`/`entry Principal` is present, an `entry.cpp` is generated that calls the class entry method (`run_loop`, `start`, `main`, or `run`). On Windows, UTF‑8 output is enabled via `SetConsoleOutputCP(65001)`.
+
+## Emission Modes
+ 
+ - Classic (`--emit classic` or default via `ultra.bat`):
+   - Generates headers + sources and a standalone `entry.cpp`.
+ - Unity (`--emit unity`):
+   - Generates a single `all.cpp` with explicit `main()`. Useful for CI, prototyping, and deterministic builds.
+ - Hybrid (`--emit hybrid`):
+   - Public headers + unity source internally. Available for projects that need public interfaces with fast unified compilation.
+ 
+ ### Cuándo usar cada modo
+ - Classic:
+   - Proyectos con interfaces públicas claras (headers) y build tradicional.
+   - Integración con librerías externas y empaquetado granular.
+ - Unity:
+   - Prototipos rápidos, CI determinista, builds sencillos en un solo archivo.
+   - Menor tiempo de compilación en proyectos pequeños/medianos.
+ - Hybrid:
+   - APIs públicas en headers con build interno tipo unity para compilar rápido.
+   - Útil cuando quieres distribuir headers pero mantener fuentes unificadas.
+
+## Release Builds
+
+Enable optimized builds:
+
+```bash
+# Windows
+ultracpp combine dist --compile --release
+# Linux/macOS
+ultracpp combine dist --compile --release
+```
+
+Build scripts add `/O2` (MSVC) or `-O2` (g++/clang++) automatically.
 
 ## Testing
-
-Run the Rust test suite:
 
 ```bash
 cargo test
 ```
 
-Includes tests for directives, syntax keywords, `elif`, inheritance (both styles), native triple quotes, Windows header detection, declarations, and filecall behavior.
+Includes tests for directives, keywords, `elif`, inheritance (both styles), native triple quotes, Windows header detection, declarations, and filecall behavior.
 
 ## Roadmap
 
-See [ROADMAP.md](./ROADMAP.md) for planned support (GPU compute, extended stdlib, advanced optimizations).
+- Unified `--emit classic|unity|hybrid`
+- Header include deduplication
+- Extended stdlib and advanced optimizations
+- GPU compute examples
+- Better diagnostics for `call` resolution
+- See [ROADMAP.md](./ROADMAP.md) for more
 
 ## Contributing
 

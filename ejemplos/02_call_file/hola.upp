@@ -1,0 +1,4 @@
+namespace Juego
+class Hola:
+  greet():
+    print("Hola mundo")

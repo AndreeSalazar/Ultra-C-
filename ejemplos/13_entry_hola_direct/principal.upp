@@ -1,0 +1,5 @@
+std
+entry Principal
+class Principal:
+  hola.upp():
+    print("Hola directo desde entry hola.upp")

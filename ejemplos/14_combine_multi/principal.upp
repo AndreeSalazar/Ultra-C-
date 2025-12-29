@@ -1,0 +1,8 @@
+std
+import greet.upp
+entry Principal
+class Principal:
+  greet.upp():
+    print("Greet desde principal")
+  run():
+    call greet.upp

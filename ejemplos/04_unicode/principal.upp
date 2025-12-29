@@ -1,0 +1,6 @@
+std
+entry Principal
+class Principal:
+  run():
+    print("¡Versión Perú — áéíóú ñ! 😊")
+

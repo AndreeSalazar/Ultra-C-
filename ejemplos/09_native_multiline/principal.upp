@@ -1,0 +1,9 @@
+std
+entry Principal
+class Principal:
+  run():
+    native """
+    std::cout << "[native] multi-line start" << std::endl;
+    std::cout << "[native] ok" << std::endl;
+    """
+

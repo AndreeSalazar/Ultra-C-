@@ -1,0 +1,6 @@
+std
+entry Principal
+class Principal:
+  run():
+    print("Modo de emisión listo")
+

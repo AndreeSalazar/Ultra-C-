@@ -1,0 +1,4 @@
+std
+class Greet:
+  greet():
+    print("Hola desde greet.upp")

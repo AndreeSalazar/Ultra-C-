@@ -1,4 +1,4 @@
-use ultracpp::{parser, codegen};
+use ultracpp::{codegen, parser};
 
 #[test]
 fn transpile_basic_class() {
@@ -11,7 +11,7 @@ class Persona:
     let c = parser::parse(src);
     let h = codegen::header(&c);
     let s = codegen::source(&c);
-    assert!(h.contains("class Persona"));
+    assert!(h.contains("class Persona") || h.contains("class UCPP_API Persona"));
     assert!(h.contains("std::string nombre;"));
     assert!(h.contains("std::string saludo();"));
     assert!(s.contains("#include \"persona.hpp\""));

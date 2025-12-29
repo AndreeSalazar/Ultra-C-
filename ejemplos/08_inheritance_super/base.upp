@@ -1,0 +1,3 @@
+class Base:
+  static say():
+    print("Base::say")

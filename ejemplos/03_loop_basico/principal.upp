@@ -1,0 +1,17 @@
+std
+entry Principal
+class Principal:
+  running: Bool
+  tick: Int
+  begin():
+    print("--- Start ---")
+    native "running = true; tick = 0;"
+  loop():
+    while running and tick < 5:
+      print("Tick:")
+      print(tick)
+      native "tick = tick + 1;"
+    print("--- End ---")
+  run():
+    begin()
+    loop()

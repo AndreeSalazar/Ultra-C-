@@ -1,0 +1,7 @@
+std
+entry Principal
+class Principal:
+  mundo.upp():
+    print("Call mundo.upp (definido)")
+  run():
+    call mundo.upp

@@ -1,0 +1,6 @@
+std
+entry Principal
+class Principal:
+  run():
+    print("Watch demo — edita este archivo y guarda")
+

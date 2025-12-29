@@ -1,4 +1,4 @@
-use ultracpp::{parser, codegen};
+use ultracpp::{codegen, parser};
 
 #[test]
 fn inheritance_header() {
@@ -10,7 +10,7 @@ class Hijo(Base):
 "#;
     let c = parser::parse(src);
     let h = codegen::header(&c);
-    assert!(h.contains("class Hijo : public Base"));
+    assert!(h.contains("class Hijo : public Base") || h.contains("class UCPP_API Hijo : public Base"));
 }
 
 #[test]
