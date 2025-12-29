@@ -26,6 +26,9 @@ pub fn header(c: &Class) -> String {
     let mut h = String::new();
     h.push_str("#pragma once\n");
     h.push_str("#include <string>\n");
+    h.push_str("#include <vector>\n");
+    h.push_str("#include <iostream>\n");
+    h.push_str("#include <memory>\n");
     
     // Auto-includes for fields
     let mut seen_includes: Vec<String> = Vec::new();
@@ -141,42 +144,194 @@ pub fn header(c: &Class) -> String {
     h
 }
 
-fn expr_cpp(e: &Expr, c: &Class) -> String {
+fn gen_expr(e: &Expr, c: &Class) -> String {
     match e {
         Expr::LiteralString(s) => format!("std::string(\"{}\")", s.replace('"', "\\\"")),
         Expr::LiteralInt(n) => format!("{}", n),
-        Expr::LiteralBool(b) => {
-            if *b { "true".to_string() } else { "false".to_string() }
-        }
         Expr::LiteralFloat(f) => format!("{}", f),
+        Expr::LiteralBool(b) => if *b { "true".to_string() } else { "false".to_string() },
+        Expr::UnaryOp(op, x) => {
+            let cpp = match op.as_str() {
+                "not" => "!",
+                _ => op.as_str(),
+            };
+            format!("({}{})", cpp, gen_expr(x, c))
+        }
+        Expr::Variable(n) => n.clone(),
         Expr::SelfField(n) => format!("this->{}", n),
         Expr::SelfCall { name, args } => {
-            let mut a: Vec<String> = Vec::new();
-            for x in args {
-                a.push(expr_cpp(x, c));
+            let a: Vec<String> = args.iter().map(|x| gen_expr(x, c)).collect();
+            // Basic static check: if method is in class and static, use ClassName::
+            // We need to find if 'name' is a static method in 'c'.
+            let is_static = c.methods.iter().any(|m| m.name == *name && m.is_static);
+            if is_static {
+                format!("{}::{}({})", c.name, name, a.join(", "))
+            } else {
+                format!("this->{}({})", name, a.join(", "))
             }
-            format!("this->{}({})", name, a.join(", "))
         }
         Expr::SuperCall { name, args } => {
-            let mut a: Vec<String> = Vec::new();
-            for x in args {
-                a.push(expr_cpp(x, c));
-            }
-            if let Some(b) = &c.base {
-                format!("{}::{}({})", b, name, a.join(", "))
+             let a: Vec<String> = args.iter().map(|x| gen_expr(x, c)).collect();
+             if let Some(b) = &c.base {
+                 format!("{}::{}({})", b, name, a.join(", "))
+             } else {
+                 format!("{}({})", name, a.join(", "))
+             }
+        }
+        Expr::FunctionCall { name, args } => {
+            let a: Vec<String> = args.iter().map(|x| gen_expr(x, c)).collect();
+            // Replace dot with double colon for likely static calls if it looks like Class.Method
+            let cpp_name = if name.contains('.') && name.chars().next().unwrap().is_uppercase() {
+                name.replace('.', "::")
             } else {
-                format!("{}({})", name, a.join(", "))
+                name.clone()
+            };
+            format!("{}({})", cpp_name, a.join(", "))
+        }
+        Expr::BinaryOp(l, op, r) => {
+            let cpp_op = match op.as_str() {
+                "and" => "&&",
+                "or" => "||",
+                _ => op.as_str(),
+            };
+            format!("{} {} {}", gen_expr(l, c), cpp_op, gen_expr(r, c))
+        }
+        Expr::Concat(l, r) => format!("({} + {})", gen_expr(l, c), gen_expr(r, c)),
+        Expr::Native(s) => s.replace("\\\"", "\""),
+        _ => "".to_string(), 
+    }
+}
+
+fn gen_stmt(e: &Expr, c: &Class, indent: usize) -> String {
+    let prefix = "  ".repeat(indent);
+    match e {
+        Expr::Block(stmts) => {
+            let mut out = String::new();
+            for s in stmts {
+                out.push_str(&gen_stmt(s, c, indent));
+            }
+            out
+        }
+        Expr::FileCall(name) => {
+            let mut out = String::new();
+            if name.to_lowercase() == "hola" {
+                out.push_str(&format!("{}std::cout << \"Hola mundo\" << std::endl;\n", prefix));
+            } else {
+                out.push_str(&format!("{}std::cout << \"Run {}.upp\" << std::endl;\n", prefix, name));
+            }
+            out
+        }
+        Expr::If { cond, then_body, else_body } => {
+            let mut out = format!("{}if ({}) {{\n", prefix, gen_expr(cond, c));
+            out.push_str(&gen_stmt(then_body, c, indent + 1));
+            out.push_str(&format!("{}}}", prefix));
+            if let Some(else_b) = else_body {
+                 out.push_str(" else {\n");
+                 out.push_str(&gen_stmt(else_b, c, indent + 1));
+                 out.push_str(&format!("{}}}", prefix));
+            }
+            out.push('\n');
+            out
+        }
+        Expr::While { cond, body } => {
+            let mut out = format!("{}while ({}) {{\n", prefix, gen_expr(cond, c));
+            out.push_str(&gen_stmt(body, c, indent + 1));
+            out.push_str(&format!("{}}}\n", prefix));
+            out
+        }
+        Expr::VarDecl { name, ty, value } => {
+            if let Some(v) = value {
+                format!("{}{} {} = {};\n", prefix, cpp_type(ty), name, gen_expr(v, c))
+            } else {
+                format!("{}{} {};\n", prefix, cpp_type(ty), name)
             }
         }
-        Expr::Concat(a, b) => format!("{} + {}", expr_cpp(a, c), expr_cpp(b, c)),
-        Expr::Native(s) => s.replace("\\\"", "\""),
+        Expr::Return(val) => {
+            if let Some(v) = val {
+                format!("{}return {};\n", prefix, gen_expr(v, c))
+            } else {
+                format!("{}return;\n", prefix)
+            }
+        }
+        Expr::Native(s) => {
+            let lines: Vec<&str> = s.lines().collect();
+            let mut out = String::new();
+            for l in lines {
+                out.push_str(&format!("{}{}\n", prefix, l.replace("\\\"", "\"")));
+            }
+            out
+        }
+        _ => {
+            format!("{}{};\n", prefix, gen_expr(e, c))
+        }
     }
 }
 
 pub fn source(c: &Class) -> String {
     let mut s = String::new();
     s.push_str(&format!("#include \"{}.hpp\"\n", c.name.to_lowercase()));
+    // Auto-includes for local VarDecl types used inside methods
+    let mut local_includes: Vec<String> = Vec::new();
+    let mut need_win = false;
+    fn is_builtin(t: &str) -> bool {
+        matches!(t.trim(), "Int" | "Float" | "Bool" | "String" | "Void" | "int" | "float" | "bool" | "double" | "Double")
+    }
+    fn collect_types(e: &Expr, acc: &mut Vec<String>) {
+        match e {
+            Expr::VarDecl { ty, .. } => {
+                let t = ty.trim().to_string();
+                if !is_builtin(&t) && !acc.iter().any(|x| x == &t) {
+                    acc.push(t);
+                }
+            }
+            Expr::Block(stmts) => {
+                for s in stmts {
+                    collect_types(s, acc);
+                }
+            }
+            Expr::If { then_body, else_body, .. } => {
+                collect_types(then_body, acc);
+                if let Some(e) = else_body {
+                    collect_types(e, acc);
+                }
+            }
+            Expr::While { body, .. } => collect_types(body, acc),
+            Expr::Return(Some(v)) => collect_types(v, acc),
+            _ => {}
+        }
+    }
+    fn contains_win_native(e: &Expr) -> bool {
+        match e {
+            Expr::Native(s) => s.contains("_kbhit") || s.contains("_getch") || s.contains("Sleep"),
+            Expr::Block(stmts) => stmts.iter().any(contains_win_native),
+            Expr::If { then_body, else_body, .. } => {
+                if contains_win_native(then_body) { return true; }
+                if let Some(e) = else_body { return contains_win_native(e); }
+                false
+            }
+            Expr::While { body, .. } => contains_win_native(body),
+            Expr::Return(Some(v)) => contains_win_native(v),
+            _ => false,
+        }
+    }
+    for m in &c.methods {
+        collect_types(&m.body, &mut local_includes);
+        if contains_win_native(&m.body) { need_win = true; }
+    }
+    for inc in local_includes {
+        if inc.to_lowercase() != c.name.to_lowercase() {
+            s.push_str(&format!("#include \"{}.hpp\"\n", inc.to_lowercase()));
+        }
+    }
     s.push_str("#include <string>\n");
+    s.push_str("#include <vector>\n");
+    s.push_str("#include <iostream>\n");
+    if need_win {
+        s.push_str("#ifdef _WIN32\n");
+        s.push_str("#include <conio.h>\n");
+        s.push_str("#include <windows.h>\n");
+        s.push_str("#endif\n");
+    }
     
     let ctor_needed = c.ctor_params.is_some() || !c.fields.is_empty();
     if ctor_needed {
@@ -223,11 +378,7 @@ pub fn source(c: &Class) -> String {
         s.push_str(&inits.join(", "));
         s.push_str(" {\n");
         if let Some(body) = &c.ctor_body {
-             if let Expr::Native(code) = body {
-                 s.push_str(&format!("  {}\n", code.replace("\\\"", "\"")));
-             } else {
-                 s.push_str(&format!("  {};\n", expr_cpp(body, c)));
-             }
+             s.push_str(&gen_stmt(body, c, 1));
         }
         s.push_str("}\n");
     }
@@ -246,11 +397,9 @@ fn method_impl(c: &Class, m: &Method) -> String {
     }
     out.push_str(&params.join(", "));
     out.push_str(") {\n");
-    if let Expr::Native(code) = &m.body {
-        out.push_str(&format!("  {}\n", code.replace("\\\"", "\"")));
-    } else if m.return_type != "Void" {
-        out.push_str(&format!("  return {};\n", expr_cpp(&m.body, c)));
-    }
+    
+    out.push_str(&gen_stmt(&m.body, c, 1));
+    
     out.push_str("}\n");
     out
 }

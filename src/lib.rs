@@ -27,11 +27,21 @@ pub enum Expr {
     LiteralInt(i64),
     LiteralBool(bool),
     LiteralFloat(f64),
+    UnaryOp(String, Box<Expr>),
     SelfField(String),
+    Variable(String),
     SelfCall { name: String, args: Vec<Expr> },
     SuperCall { name: String, args: Vec<Expr> },
+    FunctionCall { name: String, args: Vec<Expr> },
+    BinaryOp(Box<Expr>, String, Box<Expr>),
+    Block(Vec<Expr>),
+    If { cond: Box<Expr>, then_body: Box<Expr>, else_body: Option<Box<Expr>> },
+    While { cond: Box<Expr>, body: Box<Expr> },
+    Return(Option<Box<Expr>>),
+    VarDecl { name: String, ty: String, value: Option<Box<Expr>> },
     Concat(Box<Expr>, Box<Expr>),
     Native(String),
+    FileCall(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -62,6 +72,7 @@ pub struct Directives {
     pub capabilities: Vec<String>,
     pub entry: Option<String>,
     pub global_base: bool,
+    pub imports: Vec<String>,
 }
 
 pub fn resolve_includes(d: &Directives) -> Vec<String> {

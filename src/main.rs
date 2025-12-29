@@ -22,7 +22,7 @@ fn stem(p: &Path) -> String {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        eprintln!("usage: ultracpp <input.upp> [outdir] [--compile] [--no-main] [--compiler cl|g++|clang++] [--std c++17|c++20]");
+        eprintln!("usage: ultracpp <input.upp|input_dir> [outdir] [--compile] [--no-main] [--compiler cl|g++|clang++] [--std c++17|c++20]");
         eprintln!("       ultracpp init <filename> [--template game]");
         std::process::exit(1);
     }
@@ -127,10 +127,141 @@ run Main
     if staging {
         outdir_root = "staging".to_string();
     }
+    let path_meta = std::fs::metadata(input_path);
+    if let Ok(md) = path_meta {
+        if md.is_dir() {
+            let mut outdir_root_arg = outdir_root.clone();
+            for a in args.iter().skip(2) {
+                if !a.starts_with("--") && outdir_root_arg == "dist" {
+                    outdir_root_arg = a.to_string();
+                }
+            }
+            let dir_path = Path::new(input_path);
+            let base = dir_path.file_name().unwrap().to_string_lossy().to_lowercase();
+            let dir = Path::new(&outdir_root_arg).join(&base);
+            let src_dir = dir.join("src");
+            let include_dir = dir.join("include");
+            let build_dir = dir.join("build");
+            let obj_dir = build_dir.join("obj");
+            let bin_dir = build_dir.join("bin");
+            fs::create_dir_all(&src_dir).expect("create src dir failed");
+            fs::create_dir_all(&include_dir).expect("create include dir failed");
+            fs::create_dir_all(&obj_dir).expect("create obj dir failed");
+            fs::create_dir_all(&bin_dir).expect("create bin dir failed");
+            let mut files: Vec<(String, String)> = Vec::new();
+            if let Ok(rd) = fs::read_dir(dir_path) {
+                for e in rd.flatten() {
+                    let p = e.path();
+                    if let Some(ext) = p.extension() {
+                        if ext.to_string_lossy().eq_ignore_ascii_case("upp") {
+                            if let Ok(s) = fs::read_to_string(&p) {
+                                files.push((p.file_name().unwrap().to_string_lossy().to_string(), s));
+                            }
+                        }
+                    }
+                }
+            }
+            if files.is_empty() {
+                eprintln!("no .upp files in directory");
+                std::process::exit(1);
+            }
+            files.sort_by(|a,b| {
+                let sa = a.0.to_lowercase();
+                let sb = b.0.to_lowercase();
+                if sa == "main.upp" && sb != "main.upp" { std::cmp::Ordering::Less }
+                else if sb == "main.upp" && sa != "main.upp" { std::cmp::Ordering::Greater }
+                else { sa.cmp(&sb) }
+            });
+            let mut merged = Directives::default();
+            let mut classes: Vec<ultracpp::Class> = Vec::new();
+            let mut names: Vec<String> = Vec::new();
+            for (fname, content) in &files {
+                let d = parser::scan_directives(content);
+                for u in d.uses { if !merged.uses.contains(&u) { merged.uses.push(u); } }
+                for p in d.profiles { if !merged.profiles.contains(&p) { merged.profiles.push(p); } }
+                for c in d.capabilities { if !merged.capabilities.contains(&c) { merged.capabilities.push(c); } }
+                if d.global_base { merged.global_base = true; }
+                if fname.to_lowercase() == "main.upp" {
+                    merged.entry = d.entry.or(merged.entry.clone());
+                } else {
+                    if merged.entry.is_none() { merged.entry = d.entry; }
+                }
+                let parsed = parser::parse_all(content);
+                for cls in parsed {
+                    if let Some(pos) = names.iter().position(|n| n == &cls.name) {
+                        if fname.to_lowercase() == "main.upp" {
+                            classes[pos] = cls.clone();
+                        }
+                    } else {
+                        names.push(cls.name.clone());
+                        classes.push(cls.clone());
+                    }
+                }
+            }
+            let mut needs_object_base = merged.global_base;
+            for class in classes.iter_mut() {
+                if merged.global_base && class.base.is_none() {
+                    class.base = Some("Object".to_string());
+                    needs_object_base = true;
+                }
+                class.extra_includes = ultracpp::resolve_includes(&merged);
+                let hpp = codegen::header(&class);
+                let cpp = codegen::source(&class);
+                let hpp_path = include_dir.join(format!("{}.hpp", class.name.to_lowercase()));
+                let cpp_path = src_dir.join(format!("{}.cpp", class.name.to_lowercase()));
+                write(hpp_path.to_str().unwrap(), &hpp);
+                write(cpp_path.to_str().unwrap(), &cpp);
+                println!("generated: {}, {}", hpp_path.display(), cpp_path.display());
+            }
+            if needs_object_base {
+                write_object_base(&src_dir, &include_dir);
+            }
+            let exe_name = if cfg!(windows) { format!("{}.exe", base) } else { base.to_string() };
+            let exe_path = bin_dir.join(&exe_name);
+            let main_cpp_path = src_dir.join("entry.cpp");
+            if !no_main {
+                let target = select_entry_target(&classes, &merged);
+                let main_cpp = demo_main_cpp(target, &target.name.to_lowercase());
+                write(main_cpp_path.to_str().unwrap(), &main_cpp);
+            }
+            let _ = tool_detector::write_build_script(&dir, &base);
+            if staging {
+                do_compile = false;
+            }
+            match compile_cpp(&dir, &base, compiler.as_deref(), &stdver, !no_main) {
+                Ok(()) => {
+                    println!("compiled: {}", exe_path.display());
+                    let _ = Command::new(exe_path.to_str().unwrap()).current_dir(&dir).status();
+                }
+                Err(e) => {
+                    eprintln!("skip compile: {}", e);
+                }
+            }
+            return;
+        }
+    }
     let src = read_to_string(input_path);
     let t0 = Instant::now();
     let directives = parser::scan_directives(&src);
-    let classes = parser::parse_all(&src);
+    let mut classes = parser::parse_all(&src);
+    if !directives.imports.is_empty() {
+        let base_dir = Path::new(input_path).parent().unwrap_or(Path::new("."));
+        for imp in &directives.imports {
+            let ip = base_dir.join(imp);
+            if ip.exists() {
+                if let Ok(s) = fs::read_to_string(&ip) {
+                    let more = parser::parse_all(&s);
+                    for m in more {
+                        if let Some(pos) = classes.iter().position(|c| c.name == m.name) {
+                            classes[pos] = m.clone();
+                        } else {
+                            classes.push(m.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
     let parse_ms = t0.elapsed().as_millis();
     let base = stem(Path::new(input_path)).to_lowercase();
     let dir = Path::new(&outdir_root).join(&base);
@@ -256,7 +387,7 @@ Para compilar, ejecute `build.bat` (Windows) o `./build.sh` (Linux/Mac).
 
     let exe_name = if cfg!(windows) { format!("{}.exe", base) } else { base.to_string() };
     let exe_path = bin_dir.join(&exe_name);
-    let main_cpp_path = src_dir.join("main.cpp");
+    let main_cpp_path = src_dir.join("entry.cpp");
     if !no_main {
         let target = select_entry_target(&classes, &directives);
         let main_cpp = demo_main_cpp(target, &target.name.to_lowercase());

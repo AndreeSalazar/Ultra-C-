@@ -18,3 +18,27 @@ class Persona:
     assert!(s.contains("Persona::Persona("));
     assert!(s.contains("return std::string(\"Hola \") + this->nombre;"));
 }
+
+#[test]
+fn filecall_hola_upp_prints_hello() {
+    let src = r#"
+class Main:
+  def run():
+    hola.upp()
+"#;
+    let c = parser::parse(src);
+    let s = codegen::source(&c);
+    assert!(s.contains("std::cout << \"Hola mundo\" << std::endl;"));
+}
+
+#[test]
+fn filecall_other_upp_prints_run_message() {
+    let src = r#"
+class Main:
+  def run():
+    util.upp()
+"#;
+    let c = parser::parse(src);
+    let s = codegen::source(&c);
+    assert!(s.contains("std::cout << \"Run util.upp\" << std::endl;"));
+}

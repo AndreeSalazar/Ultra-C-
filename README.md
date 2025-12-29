@@ -1,89 +1,144 @@
 # Ultra C++
 
-<div align="center">
-  <img src="https://upload.wikimedia.org/wikipedia/commons/c/cc/Escudo_nacional_del_Per%C3%BA.svg" alt="Escudo del Perú" width="100"/>
-  <br>
-  <em>Hacia la democratización del conocimiento tecnológico</em>
-</div>
+![License](https://img.shields.io/badge/license-MIT-blue.svg) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg) ![Status](https://img.shields.io/badge/status-Active-green.svg)
+
+> Copyright (c) 2025 Eddi André Salazar Matos — Peru 🇵🇪
 
 ---
 
-## Propósito del Proyecto
+## Purpose
 
-> "Esta iniciativa busca democratizar el acceso a C++ mediante herramientas pedagógicas que combinan rigor técnico con elegancia conceptual. Nuestro objetivo es transformar la complejidad inherente del lenguaje en una experiencia de aprendizaje fluida y accesible."
+Ultra C++ is a didactic, transpiled language that maps a clean, Python‑inspired syntax to modern, optimized C++17. It helps learners and professionals focus on algorithms and architecture while retaining full control over native C++ when needed.
 
-Ultra C++ nace como una respuesta a la barrera de entrada que a menudo representa C++ moderno. Al fusionar la sintaxis intuitiva de lenguajes de alto nivel con la potencia del metal desnudo de C++, facilitamos un viaje educativo desde la abstracción hasta la implementación concreta.
+## Installation
 
-## Introducción
+- Rust toolchain (to build the transpiler)
+- C++ compiler: MSVC (Windows) or g++/clang++ (Linux/macOS)
 
-Ultra C++ es un transpilador vanguardista escrito en Rust, diseñado para convertir código con sintaxis orientada a objetos pura (similar a Python) en C++ moderno (C++17). No solo genera código; educa. Cada línea transpilada es un ejemplo de cómo se estructuran aplicaciones robustas, generando automáticamente archivos de cabecera (`.hpp`), fuentes (`.cpp`) y scripts de construcción multiplataforma.
+Build from source:
 
-## Instalación Detallada
-
-Para integrar Ultra C++ en su flujo de trabajo, asegúrese de contar con un entorno preparado para la excelencia.
-
-### Prerrequisitos
-*   **Rust (Cargo)**: El corazón de nuestro transpilador. Asegúrese de tener la última versión estable.
-*   **Compilador de C++**:
-    *   *Windows*: Visual Studio Build Tools (recomendado para integración nativa) o MinGW-w64.
-    *   *Linux/macOS*: GCC (`g++`) o LLVM (`clang++`).
-
-### Proceso de Compilación
-1.  Clone este repositorio o descargue el código fuente.
-2.  Abra su terminal en la raíz del proyecto.
-3.  Ejecute el comando de construcción optimizada:
-    ```bash
-    cargo build --release
-    ```
-4.  El ejecutable `ultracpp` estará disponible en `target/release/`.
-
-## Ejemplos Paradigmáticos
-
-A continuación, presentamos cómo Ultra C++ transforma conceptos abstractos en realidades tangibles.
-
-### 1. El Saludo Clásico (Hola Mundo Orientado a Objetos)
-Un ejemplo minimalista que ilustra la definición de clases, tipado fuerte y métodos.
-
-**Archivo: `hola.upp`**
-```python
-class Hola:
-    nombre: String
-
-    def saludo(self) -> String:
-        return "Saludos cordiales, " + self.nombre
-```
-
-**Generación:**
-Ejecute el transpilador para observar la magia:
 ```bash
-ultracpp hola.upp
+git clone https://github.com/EddiAndre/UltraCpp.git
+cd UltraCpp
+cargo build --release
 ```
-Esto orquestará una estructura completa en `dist/hola/`, separando limpiamente la declaración (`hola.hpp`) de la implementación (`hola.cpp`).
 
-## Buenas Prácticas Estilizadas
+The binary will be at `target/release/ultracpp`.
 
-Para mantener la armonía entre el código fuente y el código generado, recomendamos:
+## Workflow
 
-*   **Tipado Explícito**: Ultra C++ valora la claridad. Declare siempre los tipos de sus campos y retornos (ej. `String`, `Int`, `Void`).
-*   **Nomenclatura PascalCase**: Para las clases (ej. `GestorDeJuego`), evocando estructura y solidez.
-*   **Indentación Consistente**: La estructura visual define la estructura lógica. Mantenga una indentación pulcra (4 espacios).
-*   **Modularidad**: Divida su lógica en múltiples clases y archivos para facilitar la mantenibilidad y el estudio de componentes aislados.
+1. Write `.upp` files (Ultra syntax)
+2. Transpile to C++ (`.hpp` + `.cpp`)
+3. Compile and run
 
-## Roadmap de Desarrollo
+### Minimal Example
 
-Nuestro viaje hacia la excelencia continúa. Consulte [ROADMAP.md](ROADMAP.md) para una visión detallada. Hitos clave incluyen:
-*   Soporte avanzado para plantillas (Templates).
-*   Gestión de memoria inteligente y transparente.
-*   Integración con bibliotecas gráficas para desarrollo lúdico.
+```python
+entry Main
 
----
+class Main:
+  def run():
+    native "std::cout << \"Hello from Ultra C++!\" << std::endl;"
+```
 
-## Licencia
+Transpile and compile:
 
-**Copyright (c) 2025 Eddi André Salazar Matos - Perú**
+```bash
+ultracpp hello_world.upp dist
+```
 
-Se concede permiso, de forma gratuita, a cualquier persona que obtenga una copia de este software y de los archivos de documentación asociados (el "Software"), para tratar con el Software sin restricciones, incluyendo, sin limitación, los derechos de uso, copia, modificación, fusión, publicación, distribución, sublicencia y/o venta de copias del Software, y para permitir a las personas a las que se les proporcione el Software a hacerlo, sujeto a las siguientes condiciones:
+Project layout:
+- `dist/include/`: generated `.hpp`
+- `dist/src/`: generated `.cpp`
+- `dist/build/bin`: final executable
 
-El aviso de copyright anterior y este aviso de permiso se incluirán en todas las copias o partes sustanciales del Software.
+## Features & Syntax
 
-EL SOFTWARE SE PROPORCIONA "TAL CUAL", SIN GARANTÍA DE NINGÚN TIPO, EXPRESA O IMPLÍCITA, INCLUYENDO PERO NO LIMITADO A LAS GARANTÍAS DE COMERCIABILIDAD, IDONEIDAD PARA UN PROPÓSITO PARTICULAR Y NO INFRACCIÓN. EN NINGÚN CASO LOS AUTORES O TITULARES DEL COPYRIGHT SERÁN RESPONSABLES DE NINGUNA RECLAMACIÓN, DAÑO U OTRA RESPONSABILIDAD, YA SEA EN UNA ACCIÓN DE CONTRATO, AGRAVIO O DE OTRO TIPO, QUE SURJA DE, FUERA DE O EN CONEXIÓN CON EL SOFTWARE O EL USO U OTRAS TRATOS EN EL SOFTWARE.
+- Variables:
+  - `let a: Int = 1`
+  - `b: Float`
+  - `c: String = "text"`
+- Readable operators:
+  - `and` → `&&`, `or` → `||`, `not` → `!`
+- Control flow:
+  - `if / elif / else` with indentation
+- Native code:
+  - `native """ ... """` for multi‑line C++
+- Inheritance:
+  - `class Child(Base):` or `class Child : Base:` (both supported)
+- Self/Super calls:
+  - `self.m()` → `this->m()`
+  - `super().m()` → `Base::m()`
+- Dotted static:
+  - `Version.version()` → `Version::version()`
+- Conditional Windows headers:
+  - `conio.h` / `windows.h` are included only if native blocks use `_kbhit`, `_getch` or `Sleep`
+- Auto‑includes:
+  - Headers inferred from types in fields, params, and local declarations
+
+## Multi‑File Combine
+
+Ultra C++ can merge multiple `.upp` files in a folder, prioritizing `main.upp` for conflicts. Run:
+
+```bash
+ultracpp combine dist
+```
+
+Example `combine/main.upp`:
+
+```python
+profile std
+profile math
+capability io
+entry Main
+import hola.upp
+
+class Main:
+  def run():
+    let msg: String = "Bundle OK"
+    native "std::cout << msg << std::endl;"
+```
+
+## Quick Filecall
+
+For rapid validation, you can call a `.upp` file directly:
+
+```python
+class Main:
+  def run():
+    hola.upp()
+```
+
+Transpiles to:
+
+```cpp
+std::cout << "Hola mundo" << std::endl;
+```
+
+Other file names produce:
+
+```cpp
+std::cout << "Run <name>.upp" << std::endl;
+```
+
+## Entry Generation
+
+When `entry Main` or `run Main` is present, an `entry.cpp` is generated that calls `Main::run()` or similar entry points (`run_loop`, `start`, `main`, `run`).
+
+## Testing
+
+Run the Rust test suite:
+
+```bash
+cargo test
+```
+
+Includes tests for directives, syntax keywords, `elif`, inheritance (both styles), native triple quotes, Windows header detection, declarations, and filecall behavior.
+
+## Roadmap
+
+See [ROADMAP.md](./ROADMAP.md) for planned support (GPU compute, extended stdlib, advanced optimizations).
+
+## Contributing
+
+Community contributions are welcome under the MIT license. If you share the vision of accessible high‑performance education, join in.
