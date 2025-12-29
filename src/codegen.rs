@@ -68,6 +68,9 @@ pub fn header(c: &Class) -> String {
     if let Some(b) = &c.base {
         h.push_str(&format!("#include \"{}.hpp\"\n", b.to_lowercase()));
     }
+    if let Some(ns) = &c.namespace {
+        h.push_str(&format!("namespace {} {{\n", ns));
+    }
     if let Some(b) = &c.base {
         h.push_str(&format!("class {} : public {} {{\n", c.name, b));
     } else {
@@ -141,6 +144,9 @@ pub fn header(c: &Class) -> String {
         }
     }
     h.push_str("};\n");
+    if c.namespace.is_some() {
+        h.push_str("}\n");
+    }
     h
 }
 
@@ -333,6 +339,9 @@ pub fn source(c: &Class) -> String {
         s.push_str("#endif\n");
     }
     
+    if let Some(ns) = &c.namespace {
+        s.push_str(&format!("namespace {} {{\n", ns));
+    }
     let ctor_needed = c.ctor_params.is_some() || !c.fields.is_empty();
     if ctor_needed {
         let has_custom_default = if let Some(params) = &c.ctor_params {
@@ -384,6 +393,9 @@ pub fn source(c: &Class) -> String {
     }
     for m in &c.methods {
         s.push_str(&method_impl(c, m));
+    }
+    if c.namespace.is_some() {
+        s.push_str("}\n");
     }
     s
 }

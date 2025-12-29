@@ -9,8 +9,9 @@
 #include <vector>
 #include <algorithm>
 #include <functional>
-namespace Juego {
-class Hola {
+namespace Demo {
+class Main {
 public:
+  std::string run();
 };
 }

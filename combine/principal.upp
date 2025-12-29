@@ -1,0 +1,12 @@
+namespace Juego
+std
+import hola.upp
+import util.upp@1.0.0
+
+class Principal:
+  def run(self) -> Void:
+    native "std::cout << Version.version() << std::endl;"
+    hola.upp()
+    return ""
+
+entry Principal

@@ -3,68 +3,100 @@
 Este documento detalla el plan de desarrollo y el estado actual del proyecto Ultra C++.
 
 ## Leyenda de Estado
-- ✅ **Completado**: Funcionalidad implementada y verificada.
-- 🚧 **En Progreso**: Desarrollo activo o parcial.
-- 📅 **Planificado**: Próximos pasos definidos.
-- 🔮 **Futuro**: Ideas a largo plazo.
+- ✅ Completado: funcionalidad implementada y verificada.
+- 🚧 En Progreso: desarrollo activo o parcial.
+- 📅 Planificado: próximos pasos definidos.
+- 🔮 Futuro: ideas a largo plazo.
 
 ## Fase 1: Fundamentos del Lenguaje (C++ Base)
-Objetivo: Soportar la totalidad de la sintaxis y características esenciales de C++ moderno.
+Objetivo: cubrir sintaxis esencial y mapeo limpio a C++17.
 
-- [x] ✅ **Tipos de Datos Primitivos** (`Int`, `Float`, `Bool`, `String`, `Void`)
-- [x] ✅ **Programación Orientada a Objetos**
-    - [x] ✅ Clases y Objetos
-    - [x] ✅ Herencia (`class Child(Parent)`)
-    - [x] ✅ Constructores (`__init__`)
-    - [x] ✅ Métodos de Instancia (`self`)
-    - [x] ✅ Métodos Estáticos (sin `self`)
-    - [x] ✅ Encapsulamiento (`public`, `private`)
-- [x] ✅ **Control de Flujo**
-    - [x] ✅ Condicionales (`if`, `else`)
-    - [x] ✅ Bucles (`while`)
-    - [x] ✅ Retorno de valores (`return`)
-- [x] ✅ **Operadores y Expresiones**
-    - [x] ✅ Aritmética Básica (`+`, `-`, `*`, `/`)
-    - [x] ✅ Comparación (`==`, `!=`, `<`, `>`, `<=`, `>=`)
-    - [x] ✅ Asignación de Variables
-- [x] ✅ **Interoperabilidad Nativa**
-    - [x] ✅ Bloques `native "..."` (una y múltiples líneas)
-    - [x] ✅ Inclusión automática de librerías estándar (`vector`, `string`, `iostream`)
+- [x] ✅ Tipos Primitivos (`Int`, `Float`, `Bool`, `String`, `Void`)
+- [x] ✅ POO
+  - [x] ✅ Clases y Objetos
+  - [x] ✅ Herencia `class Hijo(Base)` y `class Hijo : Base`
+  - [x] ✅ Constructores `__init__`
+  - [x] ✅ Métodos de Instancia (`self`)
+  - [x] ✅ Métodos Estáticos (sin `self`)
+  - [x] ✅ Encapsulamiento (`public`, `private`)
+- [x] ✅ Control de Flujo
+  - [x] ✅ `if / elif / else`
+  - [x] ✅ `while`
+  - [x] ✅ `return`
+- [x] ✅ Operadores y Expresiones
+  - [x] ✅ Aritmética (`+`, `-`, `*`, `/`)
+  - [x] ✅ Comparación (`==`, `!=`, `<`, `>`, `<=`, `>=`)
+  - [x] ✅ Operadores legibles: `and`, `or`, `not`
+  - [x] ✅ Declaraciones: `let x: T = v` y `x: T`
+- [x] ✅ Interoperabilidad Nativa
+  - [x] ✅ `native "..."` (una y múltiples líneas)
+  - [x] ✅ `native """ ... """` (triple‑quoted)
+  - [x] ✅ Inclusiones estándar automáticas (`string`, `iostream`, `vector`)
+  - [x] ✅ Inclusión condicional de `conio.h`/`windows.h` por uso de `_kbhit`, `_getch`, `Sleep`
+- [x] ✅ Llamadas especiales
+  - [x] ✅ `self.m()` → `this->m()`
+  - [x] ✅ `super().m()` → `Base::m()`
+  - [x] ✅ Dotted static: `Version.version()` → `Version::version()`
 
 ## Fase 2: Ecosistema y Herramientas
-Objetivo: Crear un entorno de desarrollo robusto y amigable.
+Objetivo: entorno de desarrollo robusto y amigable.
 
-- [x] ✅ **Transpilador Core** (Rust)
-    - [x] ✅ Parsing eficiente
-    - [x] ✅ Generación de código C++17 limpio
-    - [x] ✅ Sistema de Directivas (`capability`, `profile`)
-- [x] ✅ **Gestión de Proyectos**
-    - [x] ✅ Estructura de directorios (`src`, `include`, `build`)
-    - [x] ✅ Generación de Build Scripts (`build.bat`, `build.sh`)
-    - [x] ✅ Detección automática de compiladores (MSVC, Clang, G++)
-- [ ] 🚧 **Sistema de Módulos**
-    - [ ] 📅 Importación de archivos `.upp`
-    - [ ] 📅 Gestión de dependencias externas
+- [x] ✅ Transpilador Core (Rust)
+  - [x] ✅ Parsing eficiente
+  - [x] ✅ Generación de C++17 limpio
+  - [x] ✅ Directivas (`profile`, `capability`, `use`, `entry`/`run`)
+- [x] ✅ Gestión de Proyectos
+  - [x] ✅ Estructura de directorios (`src`, `include`, `build/bin`, `build/obj`)
+  - [x] ✅ Build scripts (`build.bat`, `build.sh`)
+  - [x] ✅ Detección de compiladores (MSVC, Clang, G++)
+  - [x] ✅ Plantillas de inicio (`ultracpp init --template game`)
+- [x] ✅ Combine multi‑archivo
+  - [x] ✅ Importación de `.upp` (prioriza `main.upp` ante conflictos)
+  - [x] ✅ `entry.cpp` generado apuntando al método de entrada
+  - [x] ✅ Auto‑includes por tipos en campos, parámetros y variables locales
+- [x] ✅ Filecall directo
+  - [x] ✅ `hola.upp()` imprime “Hola mundo”
+  - [x] ✅ `<otro>.upp()` imprime “Run <otro>.upp”
+- [x] ✅ Reportes de staging/bench
+  - [x] ✅ Métricas de parseo y codegen
+  - [x] ✅ Conteo de clases/campos/métodos
+- [x] ✅ Sistema de Módulos
+  - [x] ✅ Importación básica de archivos `.upp`
+  - [x] ✅ Gestión de dependencias externas (versionado, cache, resolución)
+  - [x] ✅ Namespaces y visibilidad entre módulos
+- [ ] 🚧 Calidad y DX
+  - [x] ✅ Type checker y resolución de símbolos (errores tempranos)
+  - [x] ✅ Mejoras de diagnósticos (mensajes útiles, ubicaciones precisas)
+  - [x] ✅ Integración CI (cargo clippy, pruebas, binarios)
+  - [ ] 📅 Extensión para VS Code (syntax highlight, transpile on save)
 
 ## Fase 3: Computación de Alto Rendimiento (HPC) & GPU
-Objetivo: Integrar soporte nativo para aceleración por hardware.
+Objetivo: integración progresiva de aceleración por hardware.
 
-- [ ] 🔮 **Soporte CUDA (NVIDIA)**
-    - [ ] Generación de kernels `.cu` desde `.upp`
-    - [ ] Abstracción de memoria unificada
-- [ ] 🔮 **Soporte ROCm (AMD)**
-    - [ ] Compatibilidad con HIP
-- [ ] 🔮 **Soporte Intel OneAPI**
-    - [ ] Integración con SYCL/DPC++
-- [ ] 🔮 **Backend HIP-CPU**
-    - [ ] Paralelismo en CPU multi-core optimizado
+- [ ] 🔮 CUDA (NVIDIA)
+  - [ ] Generación de kernels `.cu` desde `.upp`
+  - [ ] Interfaz de memoria unificada y streams
+- [ ] 🔮 ROCm (AMD)
+  - [ ] Compatibilidad con HIP
+- [ ] 🔮 Intel OneAPI
+  - [ ] Integración con SYCL/DPC++
+- [ ] 🔮 Backend HIP‑CPU
+  - [ ] Paralelismo multi‑core optimizado
 
 ## Fase 4: Biblioteca Estándar Ultra (UltraStd)
-Objetivo: Proveer abstracciones de alto nivel para tareas comunes.
+Objetivo: abstracciones de alto nivel y utilidades prácticas.
 
-- [ ] 📅 **Matemáticas y Física** (`Vector2`, `Vector3`, `Matrix`)
-- [ ] 📅 **Entrada/Salida** (Sistema de archivos simplificado)
-- [ ] 📅 **Redes** (Sockets, HTTP básico)
+- [ ] 📅 Matemáticas/Física (`Vector2`, `Vector3`, `Matrix`, `Transform`)
+- [ ] 📅 E/S (FS simplificado, streams)
+- [ ] 📅 Redes (Sockets, HTTP básico)
+- [ ] 📅 Contenedores y utilidades (Lista, Mapa, Opcional)
+
+## Fase 5: Lanzamiento y Distribución
+Objetivo: empaquetado, distribución y documentación.
+
+- [ ] 📅 Publicación de binarios (Win/Linux/macOS)
+- [ ] 📅 Documentación y guías de usuario
+- [ ] 📅 Ejemplos canónicos (Game, CLI, Utils)
 
 ---
-*Última actualización: 2025*
+Última actualización: 2025

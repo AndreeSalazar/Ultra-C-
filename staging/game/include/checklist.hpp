@@ -6,11 +6,9 @@
 #include <string>
 #include <memory>
 #include <iostream>
-#include <vector>
-#include <algorithm>
-#include <functional>
-namespace Juego {
-class Hola {
+#include <cmath>
+#include "object.hpp"
+class Checklist : public Object {
 public:
+  void print_status();
 };
-}

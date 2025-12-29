@@ -6,11 +6,11 @@
 #include <string>
 #include <memory>
 #include <iostream>
-#include <vector>
-#include <algorithm>
-#include <functional>
-namespace Juego {
-class Hola {
+#include <cmath>
+#include "entity.hpp"
+class Enemy : public Entity {
 public:
+  int damage;
+  Enemy();
+  Enemy(float x, float y);
 };
-}

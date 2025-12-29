@@ -317,7 +317,7 @@ fn parse_block(lines: &[&str], base_indent: usize) -> (Expr, usize) {
                 let rest = trim(&trimmed["let ".len()..]);
                 if let Some(colon) = rest.find(':') {
                     let name = trim(&rest[..colon]);
-                    let mut ty_and_val = rest[colon+1..].to_string();
+                    let ty_and_val = rest[colon+1..].to_string();
                     if let Some(eq) = ty_and_val.find('=') {
                         let ty = trim(&ty_and_val[..eq]);
                         let val_str = trim(&ty_and_val[eq+1..]);
@@ -492,11 +492,11 @@ pub fn parse(input: &str) -> Class {
                     i += 1;
                 }
             }
-            return Class { name, base, fields, methods, ctor_params, ctor_body, extra_includes: Vec::new() };
+            return Class { name, base, fields, methods, ctor_params, ctor_body, extra_includes: Vec::new(), namespace: None, module_version: None };
         }
         i += 1;
     }
-    Class { name, base, fields, methods, ctor_params: None, ctor_body: None, extra_includes: Vec::new() }
+    Class { name, base, fields, methods, ctor_params: None, ctor_body: None, extra_includes: Vec::new(), namespace: None, module_version: None }
 }
 
 pub fn parse_all(input: &str) -> Vec<Class> {
@@ -578,7 +578,7 @@ pub fn parse_all(input: &str) -> Vec<Class> {
                         j += 1;
                     }
                 }
-                out.push(Class { name, base: None, fields, methods, ctor_params: None, ctor_body: None, extra_includes: Vec::new() });
+                out.push(Class { name, base: None, fields, methods, ctor_params: None, ctor_body: None, extra_includes: Vec::new(), namespace: None, module_version: None });
                 i = j;
                 continue;
             }
@@ -599,6 +599,7 @@ pub fn scan_directives(input: &str) -> Directives {
         else if let Some(v) = c.strip_prefix("entry ") { d.entry = Some(v.trim().to_string()); }
         else if let Some(v) = c.strip_prefix("run ") { d.entry = Some(v.trim().to_string()); }
         else if let Some(v) = c.strip_prefix("import ") { d.imports.push(v.trim().to_string()); }
+        else if let Some(v) = c.strip_prefix("namespace ") { d.namespace = Some(v.trim().to_string()); }
         else {
              match c {
                 "std" => d.profiles.push("std".to_string()),

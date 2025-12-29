@@ -1,0 +1,8 @@
+namespace Demo
+std
+
+class Main:
+  def run(self) -> String:
+    return "Demo desde single-file"
+
+run Main

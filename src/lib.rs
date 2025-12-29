@@ -63,6 +63,8 @@ pub struct Class {
     pub ctor_params: Option<Vec<Param>>,
     pub ctor_body: Option<Expr>,
     pub extra_includes: Vec<String>,
+    pub namespace: Option<String>,
+    pub module_version: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -73,6 +75,7 @@ pub struct Directives {
     pub entry: Option<String>,
     pub global_base: bool,
     pub imports: Vec<String>,
+    pub namespace: Option<String>,
 }
 
 pub fn resolve_includes(d: &Directives) -> Vec<String> {
@@ -88,8 +91,14 @@ pub fn resolve_includes(d: &Directives) -> Vec<String> {
                 add(&mut set, "string");
                 add(&mut set, "memory");
                 add(&mut set, "iostream");
+                add(&mut set, "vector");
+                add(&mut set, "algorithm");
+                add(&mut set, "functional");
             }
-            "math" => add(&mut set, "cmath"),
+            "math" => {
+                add(&mut set, "cmath");
+                add(&mut set, "numeric");
+            }
             _ => {}
         }
     }
@@ -99,10 +108,17 @@ pub fn resolve_includes(d: &Directives) -> Vec<String> {
                 add(&mut set, "string");
                 add(&mut set, "memory");
                 add(&mut set, "iostream");
+                add(&mut set, "vector");
+                add(&mut set, "algorithm");
             }
             "std::io" | "io" => add(&mut set, "iostream"),
             "std::string" | "string" => add(&mut set, "string"),
             "std::vector" | "vector" => add(&mut set, "vector"),
+            "std::map" | "map" => add(&mut set, "map"),
+            "std::unordered_map" | "unordered_map" => add(&mut set, "unordered_map"),
+            "std::optional" | "optional" => add(&mut set, "optional"),
+            "std::algorithm" | "algorithm" => add(&mut set, "algorithm"),
+            "std::functional" | "functional" => add(&mut set, "functional"),
             _ => {}
         }
     }
@@ -111,6 +127,10 @@ pub fn resolve_includes(d: &Directives) -> Vec<String> {
             "io" => add(&mut set, "iostream"),
             "string" => add(&mut set, "string"),
             "vector" => add(&mut set, "vector"),
+            "map" => add(&mut set, "map"),
+            "unordered_map" => add(&mut set, "unordered_map"),
+            "optional" => add(&mut set, "optional"),
+            "algorithm" => add(&mut set, "algorithm"),
             _ => {}
         }
     }

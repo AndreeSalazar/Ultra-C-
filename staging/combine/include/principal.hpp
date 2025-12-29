@@ -10,7 +10,8 @@
 #include <algorithm>
 #include <functional>
 namespace Juego {
-class Hola {
+class Principal {
 public:
+  void run();
 };
 }

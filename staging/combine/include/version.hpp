@@ -9,8 +9,9 @@
 #include <vector>
 #include <algorithm>
 #include <functional>
-namespace Juego {
-class Hola {
+namespace Utils {
+class Version {
 public:
+  static std::string version();
 };
 }

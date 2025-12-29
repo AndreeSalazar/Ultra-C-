@@ -6,12 +6,18 @@ use std::process::Command;
 use ultracpp::{codegen, parser, tool_detector};
 use ultracpp::Directives;
 use std::time::Instant;
+use std::collections::HashMap;
 
 fn read_to_string(path: &str) -> String {
     fs::read_to_string(path).expect("read failed")
 }
 
 fn write(path: &str, contents: &str) {
+    if let Ok(existing) = fs::read_to_string(path) {
+        if existing == contents {
+            return;
+        }
+    }
     fs::write(path, contents).expect("write failed")
 }
 
@@ -19,6 +25,117 @@ fn stem(p: &Path) -> String {
     p.file_stem().unwrap().to_string_lossy().to_string()
 }
 
+fn is_builtin_ty(t: &str) -> bool {
+    matches!(t.trim(), "Int" | "Float" | "Bool" | "String" | "Void" | "int" | "float" | "bool" | "double" | "Double")
+}
+
+fn parse_import_spec(s: &str) -> (String, Option<String>) {
+    if let Some(pos) = s.rfind('@') {
+        let p = s[..pos].trim();
+        let v = s[pos + 1..].trim();
+        let mut path = p.to_string();
+        if !path.ends_with(".upp") {
+            path.push_str(".upp");
+        }
+        return (path, if v.is_empty() { None } else { Some(v.to_string()) });
+    }
+    let mut path = s.trim().to_string();
+    if !path.ends_with(".upp") {
+        path.push_str(".upp");
+    }
+    (path, None)
+}
+
+fn type_check(classes: &[ultracpp::Class]) -> Vec<String> {
+    let mut errors: Vec<String> = Vec::new();
+    let mut class_map: HashMap<String, ultracpp::Class> = HashMap::new();
+    for c in classes {
+        class_map.insert(c.name.clone(), c.clone());
+    }
+    fn check_expr(e: &ultracpp::Expr, c: &ultracpp::Class, method: &str, classes: &HashMap<String, ultracpp::Class>, errors: &mut Vec<String>) {
+        match e {
+            ultracpp::Expr::SelfField(n) => {
+                let ok = c.fields.iter().any(|f| &f.name == n);
+                if !ok {
+                    errors.push(format!("Campo desconocido '{}' en {}::{}", n, c.name, method));
+                }
+            }
+            ultracpp::Expr::SelfCall { name, .. } => {
+                let ok = c.methods.iter().any(|m| &m.name == name);
+                if !ok {
+                    errors.push(format!("Método desconocido '{}' en {}::{}", name, c.name, method));
+                }
+            }
+            ultracpp::Expr::SuperCall { name, .. } => {
+                if let Some(b) = &c.base {
+                    if let Some(base_cls) = classes.get(b) {
+                        let ok = base_cls.methods.iter().any(|m| &m.name == name);
+                        if !ok {
+                            errors.push(format!("Método '{}' no existe en base {} para {}::{}", name, b, c.name, method));
+                        }
+                    }
+                }
+            }
+            ultracpp::Expr::FunctionCall { name, .. } => {
+                if name.contains('.') {
+                    let parts: Vec<&str> = name.split('.').collect();
+                    if parts.len() == 2 {
+                        let cls = parts[0].to_string();
+                        let m = parts[1].to_string();
+                        if let Some(ref cc) = classes.get(&cls) {
+                            let ok = cc.methods.iter().any(|mm| mm.name == m);
+                            if !ok {
+                                errors.push(format!("Método '{}' no existe en clase {}", m, cls));
+                            }
+                        } else {
+                            errors.push(format!("Clase '{}' no encontrada para llamada {}", cls, name));
+                        }
+                    }
+                }
+            }
+            ultracpp::Expr::VarDecl { ty, .. } => {
+                let t = ty.trim().to_string();
+                if !is_builtin_ty(&t) && !classes.contains_key(&t) {
+                    errors.push(format!("Tipo '{}' no resuelto en {}::{}", t, c.name, method));
+                }
+            }
+            ultracpp::Expr::BinaryOp(l, _, r) => {
+                check_expr(l, c, method, classes, errors);
+                check_expr(r, c, method, classes, errors);
+            }
+            ultracpp::Expr::Block(stmts) => {
+                for s in stmts {
+                    check_expr(s, c, method, classes, errors);
+                }
+            }
+            ultracpp::Expr::If { cond, then_body, else_body } => {
+                check_expr(cond, c, method, classes, errors);
+                check_expr(then_body, c, method, classes, errors);
+                if let Some(e2) = else_body {
+                    check_expr(e2, c, method, classes, errors);
+                }
+            }
+            ultracpp::Expr::While { cond, body } => {
+                check_expr(cond, c, method, classes, errors);
+                check_expr(body, c, method, classes, errors);
+            }
+            ultracpp::Expr::Return(Some(v)) => {
+                check_expr(v, c, method, classes, errors);
+            }
+            ultracpp::Expr::Concat(l, r) => {
+                check_expr(l, c, method, classes, errors);
+                check_expr(r, c, method, classes, errors);
+            }
+            _ => {}
+        }
+    }
+    for c in classes {
+        for m in &c.methods {
+            check_expr(&m.body, c, &m.name, &class_map, &mut errors);
+        }
+    }
+    errors
+}
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -101,6 +218,7 @@ run Main
     let mut stdver: String = "c++17".to_string();
     let mut bench = false;
     let mut staging = false;
+    let mut watch = false;
     for a in args.iter().skip(2) {
         if a.starts_with("--compile") {
             do_compile = true;
@@ -120,6 +238,8 @@ run Main
             bench = true;
         } else if a.starts_with("--staging") {
             staging = true;
+        } else if a.starts_with("--watch") {
+            watch = true;
         } else if !a.starts_with("--") && outdir_root == "dist" {
             outdir_root = a.to_string();
         }
@@ -168,8 +288,8 @@ run Main
             files.sort_by(|a,b| {
                 let sa = a.0.to_lowercase();
                 let sb = b.0.to_lowercase();
-                if sa == "main.upp" && sb != "main.upp" { std::cmp::Ordering::Less }
-                else if sb == "main.upp" && sa != "main.upp" { std::cmp::Ordering::Greater }
+                if sa == "principal.upp" && sb != "principal.upp" { std::cmp::Ordering::Less }
+                else if sb == "principal.upp" && sa != "principal.upp" { std::cmp::Ordering::Greater }
                 else { sa.cmp(&sb) }
             });
             let mut merged = Directives::default();
@@ -181,15 +301,19 @@ run Main
                 for p in d.profiles { if !merged.profiles.contains(&p) { merged.profiles.push(p); } }
                 for c in d.capabilities { if !merged.capabilities.contains(&c) { merged.capabilities.push(c); } }
                 if d.global_base { merged.global_base = true; }
-                if fname.to_lowercase() == "main.upp" {
+                if merged.namespace.is_none() { merged.namespace = d.namespace.clone(); }
+                if fname.to_lowercase() == "principal.upp" {
                     merged.entry = d.entry.or(merged.entry.clone());
                 } else {
                     if merged.entry.is_none() { merged.entry = d.entry; }
                 }
-                let parsed = parser::parse_all(content);
-                for cls in parsed {
+                let mut parsed = parser::parse_all(content);
+                for cls in parsed.iter_mut() {
+                    cls.namespace = d.namespace.clone();
+                }
+                for cls in parsed.into_iter() {
                     if let Some(pos) = names.iter().position(|n| n == &cls.name) {
-                        if fname.to_lowercase() == "main.upp" {
+                        if fname.to_lowercase() == "principal.upp" {
                             classes[pos] = cls.clone();
                         }
                     } else {
@@ -199,12 +323,18 @@ run Main
                 }
             }
             let mut needs_object_base = merged.global_base;
+            let type_errors = type_check(&classes);
+            if !type_errors.is_empty() {
+                for e in type_errors { eprintln!("{}", e); }
+                std::process::exit(1);
+            }
             for class in classes.iter_mut() {
                 if merged.global_base && class.base.is_none() {
                     class.base = Some("Object".to_string());
                     needs_object_base = true;
                 }
                 class.extra_includes = ultracpp::resolve_includes(&merged);
+                if class.namespace.is_none() { class.namespace = merged.namespace.clone(); }
                 let hpp = codegen::header(&class);
                 let cpp = codegen::source(&class);
                 let hpp_path = include_dir.join(format!("{}.hpp", class.name.to_lowercase()));
@@ -244,20 +374,28 @@ run Main
     let t0 = Instant::now();
     let directives = parser::scan_directives(&src);
     let mut classes = parser::parse_all(&src);
+    let mut import_cache: Vec<(String, String, String)> = Vec::new();
     if !directives.imports.is_empty() {
         let base_dir = Path::new(input_path).parent().unwrap_or(Path::new("."));
         for imp in &directives.imports {
-            let ip = base_dir.join(imp);
+            let (imp_path, ver) = parse_import_spec(imp);
+            let ip = base_dir.join(&imp_path);
             if ip.exists() {
                 if let Ok(s) = fs::read_to_string(&ip) {
                     let more = parser::parse_all(&s);
-                    for m in more {
+                    let di = parser::scan_directives(&s);
+                    for mut m in more {
+                        m.namespace = di.namespace.clone();
+                        m.module_version = ver.clone();
                         if let Some(pos) = classes.iter().position(|c| c.name == m.name) {
                             classes[pos] = m.clone();
                         } else {
                             classes.push(m.clone());
                         }
                     }
+                    let stem = Path::new(&imp_path).file_stem().unwrap().to_string_lossy().to_string();
+                    let v = ver.clone().unwrap_or_else(|| "latest".to_string());
+                    import_cache.push((stem, v, s));
                 }
             }
         }
@@ -275,6 +413,15 @@ run Main
     fs::create_dir_all(&include_dir).expect("create include dir failed");
     fs::create_dir_all(&obj_dir).expect("create obj dir failed");
     fs::create_dir_all(&bin_dir).expect("create bin dir failed");
+    if !import_cache.is_empty() {
+        let cache_dir = build_dir.join("cache");
+        fs::create_dir_all(&cache_dir).expect("create cache dir failed");
+        for (name, ver, contents) in &import_cache {
+            let fname = format!("{}@{}.upp", name.to_lowercase(), ver);
+            let fpath = cache_dir.join(fname);
+            write(fpath.to_str().unwrap(), contents);
+        }
+    }
 
     // Write README.md
     let readme_content = r#"# Estructura del Proyecto
@@ -292,6 +439,11 @@ Para compilar, ejecute `build.bat` (Windows) o `./build.sh` (Linux/Mac).
     let _ = fs::write(dir.join("README.md"), readme_content);
 
     let mut needs_object_base = directives.global_base;
+    let type_errors = type_check(&classes);
+    if !type_errors.is_empty() {
+        for e in type_errors { eprintln!("{}", e); }
+        std::process::exit(1);
+    }
     if classes.is_empty() {
         let class = parser::parse(&src);
         let mut class = class;
@@ -300,6 +452,7 @@ Para compilar, ejecute `build.bat` (Windows) o `./build.sh` (Linux/Mac).
             needs_object_base = true;
         }
         class.extra_includes = ultracpp::resolve_includes(&directives);
+        class.namespace = directives.namespace.clone();
         let hpp = codegen::header(&class);
         let cpp = codegen::source(&class);
         let hpp_path = include_dir.join(format!("{}.hpp", class.name.to_lowercase()));
@@ -373,6 +526,7 @@ Para compilar, ejecute `build.bat` (Windows) o `./build.sh` (Linux/Mac).
             needs_object_base = true;
         }
         class.extra_includes = ultracpp::resolve_includes(&directives);
+        if class.namespace.is_none() { class.namespace = directives.namespace.clone(); }
         let hpp = codegen::header(&class);
         let cpp = codegen::source(&class);
         let hpp_path = include_dir.join(format!("{}.hpp", class.name.to_lowercase()));
@@ -452,6 +606,25 @@ Para compilar, ejecute `build.bat` (Windows) o `./build.sh` (Linux/Mac).
         report.push_str("}");
         let _ = fs::write(report_path, report);
     }
+    if watch {
+        if let Ok(md) = std::fs::metadata(input_path) {
+            if let Ok(mut last) = md.modified() {
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(1200));
+                    if let Ok(md2) = std::fs::metadata(input_path) {
+                        if let Ok(now) = md2.modified() {
+                            if now > last {
+                                last = now;
+                                let exe = std::env::current_exe().unwrap();
+                                let args_next: Vec<String> = std::env::args().skip(1).collect();
+                                let _ = Command::new(exe).args(&args_next).status();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn demo_main_cpp(class: &ultracpp::Class, base: &str) -> String {
@@ -479,15 +652,16 @@ fn demo_main_cpp(class: &ultracpp::Class, base: &str) -> String {
     );
 
     if let Some(m) = entry_method {
+        let qname = if let Some(ns) = &class.namespace { format!("{}::{}", ns, class.name) } else { class.name.clone() };
         if !m.is_static {
             if ctor_args.is_empty() {
-                s.push_str(&format!("  {} obj{{}};\n", class.name));
+                s.push_str(&format!("  {} obj{{}};\n", qname));
             } else {
-                s.push_str(&format!("  {} obj({});\n", class.name, ctor_args));
+                s.push_str(&format!("  {} obj({});\n", qname, ctor_args));
             }
             s.push_str(&format!("  obj.{}(", m.name));
         } else {
-            s.push_str(&format!("  {}::{}(", class.name, m.name));
+            s.push_str(&format!("  {}::{}(", qname, m.name));
         }
         
         let mut call_args: Vec<String> = Vec::new();
@@ -501,15 +675,16 @@ fn demo_main_cpp(class: &ultracpp::Class, base: &str) -> String {
         let maybe_m = class.methods.iter().find(|m| m.return_type == "String");
         if let Some(m) = maybe_m {
             // Create object only if method is instance
+            let qname = if let Some(ns) = &class.namespace { format!("{}::{}", ns, class.name) } else { class.name.clone() };
             if !m.is_static {
                 if ctor_args.is_empty() {
-                    s.push_str(&format!("  {} obj{{}};\n", class.name));
+                    s.push_str(&format!("  {} obj{{}};\n", qname));
                 } else {
-                    s.push_str(&format!("  {} obj({});\n", class.name, ctor_args));
+                    s.push_str(&format!("  {} obj({});\n", qname, ctor_args));
                 }
             }
             if m.is_static {
-                s.push_str(&format!("  std::cout << {}::{}(", class.name, m.name));
+                s.push_str(&format!("  std::cout << {}::{}(", qname, m.name));
             } else {
                 s.push_str(&format!("  std::cout << obj.{}(", m.name));
             }
@@ -536,10 +711,8 @@ fn default_cpp_value(ty: &str) -> String {
     }
 }
 
-fn compile_cpp(dir: &Path, base: &str, compiler: Option<&str>, stdver: &str, has_main: bool) -> Result<(), String> {
+fn compile_cpp(dir: &Path, base: &str, compiler: Option<&str>, stdver: &str, _has_main: bool) -> Result<(), String> {
     let exe_name = if cfg!(windows) { format!("{}.exe", base) } else { base.to_string() };
-    let bin_dir = dir.join("build").join("bin");
-    let exe = bin_dir.join(&exe_name);
     
     if compiler.is_none() || compiler == Some("cl") {
         if let Ok(()) = tool_detector::compile_with_msvc(dir, base) {
