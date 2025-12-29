@@ -1,7 +1,0 @@
-#include "principal.hpp"
-#include <iostream>
-int main() {
-  Juego::Principal obj{};
-  obj.run();
-  return 0;
-}

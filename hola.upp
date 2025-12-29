@@ -1,7 +1,0 @@
-Hola
-  name String
-
-  greet -> String
-    "Hola " + name
-
-run Hola
